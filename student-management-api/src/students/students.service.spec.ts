@@ -36,6 +36,33 @@ describe('StudentsService', () => {
     await expect(service.findAll()).resolves.toEqual([{ id: 3, userId: null, firstName: 'Ada', lastName: 'Okafor', email: student.email, status: null }]);
   });
 
+  it('includes a local invitation URL when the invitation service returns one', async () => {
+    const users = {
+      findOne: vi.fn().mockResolvedValue(null),
+      create: vi.fn((value) => value),
+      save: vi.fn(async (value) => ({ id: 24, ...value })),
+    };
+    const students = {
+      findOne: vi.fn().mockResolvedValue(null),
+      create: vi.fn((value) => value),
+      save: vi.fn(async (value) => ({ id: 25, ...value })),
+    };
+    const manager = { getRepository: (entity: unknown) => entity === User ? users : students };
+    dataSource.transaction.mockImplementation(async (callback) => callback(manager));
+    invitations.createFor.mockResolvedValue({
+      invitation: { id: 26, expiresAt: new Date('2026-11-17T00:00:00.000Z') },
+      invitationUrl: 'http://localhost:5173/accept-invitation?token=local-token',
+    });
+
+    const response = await service.createStudent({
+      email: 'new-student@example.test',
+      firstName: 'Ada',
+      lastName: 'Okafor',
+    }, { ...actor, accountType: AccountType.SUPER_ADMIN });
+
+    expect(response.invitation.invitationUrl).toBe('http://localhost:5173/accept-invitation?token=local-token');
+  });
+
   it('rejects Student email updates that conflict with a different User account', async () => {
     const linkedStudent = { ...student, user: { ...studentUser } };
     const studentRepo = { findOne: vi.fn().mockResolvedValue(linkedStudent), save: vi.fn() };

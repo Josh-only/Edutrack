@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import type { AccountType } from '../services/api-models'
 import BrandLogo from '../BrandLogo'
+import NotificationCenter from './NotificationCenter'
 
 interface NavigationItem {
   label: string
@@ -16,6 +17,8 @@ function navigationFor(role: AccountType): NavigationItem[] {
       { label: 'Overview', to: '/super-admin/dashboard', end: true },
       { label: 'Students', to: '/super-admin/students' },
       { label: 'Staff', to: '/super-admin/staff' },
+      { label: 'Courses', to: '/super-admin/courses' },
+      { label: 'Academic reports', to: '/super-admin/reports' },
       { label: 'Invitations', to: '/super-admin/invitations' },
       { label: 'Audit history', to: '/super-admin/audit' },
       { label: 'My profile', to: '/super-admin/profile' },
@@ -25,12 +28,15 @@ function navigationFor(role: AccountType): NavigationItem[] {
     return [
       { label: 'Overview', to: '/staff/dashboard', end: true },
       { label: 'Students', to: '/staff/students' },
+      { label: 'Courses', to: '/staff/courses' },
+      { label: 'Academic reports', to: '/staff/reports' },
       { label: 'Invitations', to: '/staff/invitations' },
       { label: 'My profile', to: '/staff/profile' },
     ]
   }
   return [
     { label: 'Overview', to: '/student/dashboard', end: true },
+    { label: 'My courses', to: '/student/courses' },
     { label: 'My profile', to: '/student/profile' },
   ]
 }
@@ -75,10 +81,11 @@ export default function DashboardLayout() {
       <main className="dashboard-main">
         <header className="dashboard-header">
           <div>
-            <p className="eyebrow">EDUTRACK PHASE 1</p>
+            <p className="eyebrow">EDUTRACK SIS</p>
             <h1>{account.accountType === 'super_admin' ? 'Administration' : account.accountType === 'staff' ? 'Staff workspace' : 'Student portal'}</h1>
           </div>
           <div className="account-chip">
+            <NotificationCenter />
             <span className="avatar" aria-hidden="true">{account.email.slice(0, 1).toUpperCase()}</span>
             <span>{account.email}</span>
           </div>

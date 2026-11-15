@@ -36,4 +36,27 @@ describe('validateEnvironment', () => {
       'PORT must be an integer between 1 and 65535.',
     );
   });
+
+  it('allows local invitation links only when explicitly enabled in development', () => {
+    const environment = {
+      ...validEnvironment,
+      NODE_ENV: 'development',
+      LOCAL_INVITATION_LINKS: 'true',
+    };
+
+    expect(validateEnvironment(environment)).toBe(environment);
+    expect(() => validateEnvironment({
+      ...validEnvironment,
+      NODE_ENV: 'production',
+      LOCAL_INVITATION_LINKS: 'true',
+    })).toThrow('LOCAL_INVITATION_LINKS can only be enabled when NODE_ENV is development.');
+  });
+
+  it('rejects invalid local invitation link setting values', () => {
+    expect(() => validateEnvironment({
+      ...validEnvironment,
+      NODE_ENV: 'development',
+      LOCAL_INVITATION_LINKS: 'yes',
+    })).toThrow('LOCAL_INVITATION_LINKS must be true or false.');
+  });
 });

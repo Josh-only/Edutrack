@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { EmptyState, ErrorState, LoadingState, PageTitle, StatusBadge } from '../components/PagePrimitives'
+import LocalInvitationLink from '../components/LocalInvitationLink'
 import type { AccountStatus, AccountType, Student, StudentCreation } from '../services/api-models'
 import { createStudent, getStudentById, getStudents, updateStudent, updateStudentStatus } from '../services/students'
 
@@ -74,9 +75,12 @@ export default function StudentPage() {
         action={<button className="button button--primary" type="button" onClick={() => { setShowForm((value) => !value); setFormError('') }}>{showForm ? 'Close form' : 'Register Student'}</button>}
       />
       {created && (
-        <p className="inline-success" role="status">
-          Account created for {created.email}. Invitation delivery is asynchronous; invitation #{created.invitation.id} expires {new Date(created.invitation.expiresAt).toLocaleString()}.
-        </p>
+        <>
+          <p className="inline-success" role="status">
+            Account created for {created.email}. Invitation delivery is asynchronous; invitation #{created.invitation.id} expires {new Date(created.invitation.expiresAt).toLocaleString()}.
+          </p>
+          {created.invitation.invitationUrl && <LocalInvitationLink url={created.invitation.invitationUrl} />}
+        </>
       )}
       {showForm && (
         <form className="panel form-grid" onSubmit={handleCreate}>

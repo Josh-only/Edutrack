@@ -540,6 +540,12 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.local-invitation-link code {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

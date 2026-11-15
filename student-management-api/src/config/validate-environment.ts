@@ -30,6 +30,14 @@ export function validateEnvironment<T extends Environment>(environment: T): T {
 
   validatePort(environment, 'DB_PORT');
   validatePort(environment, 'PORT');
+  const localInvitationLinks = environment.LOCAL_INVITATION_LINKS;
+  if (localInvitationLinks !== undefined && localInvitationLinks !== 'true' && localInvitationLinks !== 'false') {
+    throw new Error('LOCAL_INVITATION_LINKS must be true or false.');
+  }
+  if (localInvitationLinks === 'true' && environment.NODE_ENV !== 'development') {
+    throw new Error('LOCAL_INVITATION_LINKS can only be enabled when NODE_ENV is development.');
+  }
+
   const smtpVariables = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'EMAIL_FROM'];
   if (smtpVariables.some((name) => typeof environment[name] === 'string' && String(environment[name]).trim() !== '')) {
     if (!environment.SMTP_HOST) throw new Error('SMTP_HOST is required when SMTP delivery is configured.');

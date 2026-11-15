@@ -1,4 +1,4 @@
-import { apiRequest, isRecord, requireNumber, requireString } from './api'
+import { apiRequest, isRecord, parseLocalInvitationUrl, requireNumber, requireString } from './api'
 import type {
   AccountType,
   AuditEvent,
@@ -106,14 +106,19 @@ export async function revokeInvitation(id: number): Promise<void> {
   }
 }
 
-export async function resendInvitation(id: number): Promise<{ id: number; expiresAt: string }> {
+export async function resendInvitation(id: number): Promise<{ id: number; expiresAt: string; invitationUrl?: string }> {
   const value = await apiRequest(`/invitations/${encodeURIComponent(id)}/resend`, { method: 'POST' })
   if (!isRecord(value) || value.status !== 'pending_delivery') {
     throw new Error('The server returned an invalid invitation resend response.')
   }
+  const invitationUrl = parseLocalInvitationUrl(
+    value.invitationUrl,
+    'The server returned an invalid invitation resend response.',
+  )
   return {
     id: requireNumber(value.id, 'The server returned an invalid invitation resend response.'),
     expiresAt: requireString(value.expiresAt, 'The server returned an invalid invitation resend response.'),
+    ...(invitationUrl ? { invitationUrl } : {}),
   }
 }
 

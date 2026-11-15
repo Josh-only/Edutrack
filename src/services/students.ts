@@ -1,4 +1,4 @@
-import { apiRequest, isRecord, requireNumber, requireString } from './api'
+import { apiRequest, isRecord, parseLocalInvitationUrl, requireNumber, requireString } from './api'
 import type { AccountStatus, Student, StudentCreation } from './api-models'
 
 export type { Student } from './api-models'
@@ -60,12 +60,17 @@ function parseCreation(value: unknown): StudentCreation {
       typeof invitation.expiresAt !== 'string') {
     throw new Error('The server returned invalid invitation details.')
   }
+  const invitationUrl = parseLocalInvitationUrl(
+    invitation.invitationUrl,
+    'The server returned invalid invitation details.',
+  )
   return {
     ...student,
     invitation: {
       id: requireNumber(invitation.id, 'The server returned invalid invitation details.'),
       expiresAt: invitation.expiresAt,
       status: 'pending_delivery',
+      ...(invitationUrl ? { invitationUrl } : {}),
     },
   }
 }

@@ -1,4 +1,4 @@
-export const API_URL = '/api'
+export const API_URL = (import.meta.env?.VITE_API_BASE_URL as string | undefined) ?? '/api'
 export const SESSION_EXPIRED_EVENT = 'edutrack:session-expired'
 
 export class ApiError extends Error {
@@ -101,4 +101,25 @@ export function requireNumber(value: unknown, message: string): number {
 export function requireString(value: unknown, message: string): string {
   if (typeof value !== 'string') throw new Error(message)
   return value
+}
+
+export function parseLocalInvitationUrl(value: unknown, message: string): string | undefined {
+  if (value === undefined) return undefined
+  const rawUrl = requireString(value, message)
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    throw new Error(message)
+  }
+  if (
+    url.protocol !== 'http:' ||
+    url.hostname !== 'localhost' ||
+    url.port !== '5173' ||
+    url.pathname !== '/accept-invitation' ||
+    !url.searchParams.get('token')
+  ) {
+    throw new Error(message)
+  }
+  return url.href
 }

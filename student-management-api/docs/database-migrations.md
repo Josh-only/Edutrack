@@ -23,12 +23,16 @@ Do not use this procedure against production until backup, schema review, and de
 
 ## Fresh database
 
-Create an empty database with the required privileges, configure its connection, build, then run `npm run migration:run`. The baseline creates Users/Students, the retained Staff migration creates Staff, and subsequent additive migrations introduce account lifecycle, invitation, outbox, Student linkage, and audit structures.
+Create an empty database with the required privileges, configure its connection, build, then run `npm run migration:run`. The baseline creates Users/Students, the retained Staff migration creates Staff, and subsequent additive migrations introduce account lifecycle, invitation, outbox, Student linkage, audit, and academic MVP structures.
 
 ## Rollback
 
-The baseline and lifecycle migrations are intentionally irreversible. Do not run `npm run migration:revert` for production recovery; it can remove foundational tables or violate historical retention. Prefer application rollback plus forward corrective migrations. Restore from a verified backup only under the database recovery procedure. Review each future migration's data impact and recovery plan before execution.
+The baseline and lifecycle migrations are intentionally irreversible. The academic MVP migration is reversible only while no dependent course data must be retained. Do not run `npm run migration:revert` for production recovery; it can remove foundational or academic records and violate historical retention. Prefer application rollback plus forward corrective migrations. Restore from a verified backup only under the database recovery procedure. Review each future migration's data impact and recovery plan before execution.
 
 ## Legacy data acceptance check
 
 No migration assigns `students.user_id`. The three legacy Student records remain nullable and unlinked. The database migration should be followed by aggregate checks for total Student count, null `user_id` count, total User count, Staff migration history, and constraint/index presence. Never print individual student records during this verification.
+
+## Academic MVP migration
+
+`AcademicMvp20261115000000` adds courses, enrollments, attendance, assessments, grades, and per-user in-app notifications. It is registered in both the runtime module and the CLI data source. It does not modify existing Student, Staff, or User rows. Course/enrollment/assessment history uses restrictive foreign keys; do not revert this migration after academic records have been entered.

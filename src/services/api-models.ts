@@ -12,6 +12,7 @@ export interface InvitationReceipt {
   id: number
   expiresAt: string
   status: 'pending_delivery'
+  invitationUrl?: string
 }
 
 export interface Student {

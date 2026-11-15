@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState, PageTitle, StatusBadge } from '../components/PagePrimitives'
+import LocalInvitationLink from '../components/LocalInvitationLink'
 import type { AccountStatus, StaffCreation, StaffMember } from '../services/api-models'
 import { createStaff, getStaff, getStaffById, updateStaff, updateStaffStatus } from '../services/staff'
 
@@ -89,7 +90,12 @@ export default function StaffPage() {
         description="Create and manage Staff accounts. New accounts receive a time-limited invitation."
         action={<button className="button button--primary" type="button" onClick={() => { setShowForm((value) => !value); setFormError('') }}>{showForm ? 'Close form' : 'Create Staff account'}</button>}
       />
-      {created && <p className="inline-success" role="status">Staff account created for {created.email}. Invitation #{created.invitation.id} expires {new Date(created.invitation.expiresAt).toLocaleString()}.</p>}
+      {created && (
+        <>
+          <p className="inline-success" role="status">Staff account created for {created.email}. Invitation #{created.invitation.id} expires {new Date(created.invitation.expiresAt).toLocaleString()}.</p>
+          {created.invitation.invitationUrl && <LocalInvitationLink url={created.invitation.invitationUrl} />}
+        </>
+      )}
       {showForm && (
         <form className="panel form-grid" onSubmit={handleCreate}>
           <h3 className="form-grid-title">Create Staff account</h3>

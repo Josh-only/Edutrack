@@ -4,12 +4,14 @@ import { landingPath } from './auth/routes'
 import { useAuth } from './auth/useAuth'
 import DashboardLayout from './components/DashboardLayout'
 import { RedirectToAccountHome, RequireAccount } from './components/ProtectedRoutes'
+import CoursesPage from './pages/Courses'
 import AuditPage from './pages/Audit'
 import DashboardPage from './Dashboard'
 import InvitationAcceptancePage from './pages/InvitationAcceptance'
 import InvitationsPage from './pages/Invitations'
 import LoginPage from './pages/Login'
 import ProfilePage from './pages/Profile'
+import ReportsPage from './pages/Reports'
 import StaffPage, { StaffDetailPage } from './pages/Staff'
 import StudentPage, { StudentDetailPage } from './pages/Students'
 import './App.css'
@@ -33,10 +35,13 @@ function AppRoutes() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="students" element={<StudentPage />} />
           <Route path="students/:id" element={<StudentDetailPage />} />
+          <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses/:id" element={<CoursesPage />} />
           <Route path="staff" element={<StaffPage />} />
           <Route path="staff/:id" element={<StaffDetailPage />} />
           <Route path="invitations" element={<InvitationsPage />} />
           <Route path="audit" element={<AuditPage />} />
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>
       </Route>
@@ -47,6 +52,9 @@ function AppRoutes() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="students" element={<StudentPage />} />
           <Route path="students/:id" element={<StudentDetailPage />} />
+          <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses/:id" element={<CoursesPage />} />
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="invitations" element={<InvitationsPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>
@@ -56,6 +64,8 @@ function AppRoutes() {
         <Route path="/student" element={<DashboardLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses/:id" element={<CoursesPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>
       </Route>

@@ -1,5 +1,7 @@
 # EduTrack Phase 1 Frontend Implementation Report
 
+> **MVP follow-up (2026-11-15):** The application has since been extended beyond the Phase 1 scope in this historical report. See the academic workflow details in [the API contract](../student-management-api/docs/phase-1-api.md); the follow-up adds the course, enrollment, attendance, gradebook, CSV report, and in-app notification paths described there. The verification results below describe the original Phase 1 pass, not the follow-up changes.
+
 ## Executive summary
 
 Phase 1 frontend workflows are implemented against the documented three-role API contract. The frontend now has shared authentication, role-aware routes, role-specific dashboard experiences, Student and Staff management pages, invitation acceptance and management, profile views, and audit history.
@@ -35,6 +37,8 @@ No ordinary permanent-delete workflow or delete API call was added.
 
 The frontend service layer is in `src/services/`. It uses `src/services/api.ts` for JSON requests, Bearer-token attachment, HTTP error handling, and response validation. `vite.config.ts` proxies `/api` to `http://localhost:3000` and removes the prefix.
 
+`vite.config.ts` proxies `/api` to `http://localhost:3000` by default, configurable with `VITE_BACKEND_URL` or `VITE_BACKEND_PORT`. `src/services/api.ts` uses `VITE_API_BASE_URL` when set and otherwise defaults to `/api`. The root `.env.example` contains frontend settings only.
+
 The client uses these documented routes:
 
 | Workflow | API calls |
@@ -58,9 +62,10 @@ The implementation and integration changes are concentrated in:
 - `src/auth/` and `src/components/` for session state, route protection, navigation, and shared UI states.
 - `src/pages/` for login, dashboards, profile, Student, Staff, invitation, and audit screens.
 - `src/services/` for API models, request handling, authentication, and domain API functions.
+- `vitest.config.ts` and `src/**/*.test.{ts,tsx}` for the frontend test runner and route/API regression tests.
 - `package.json` and `package-lock.json` for dependency alignment. React Router is declared as `^6.30.6`; the installed version is `6.30.6`. TypeScript is declared as `~6.0.2` and installed as `6.0.3`, aligning the compiler with the installed ESLint TypeScript tooling.
 
-The workspace has no Git metadata, so a Git diff or change attribution could not be established.
+The current checkout is a Git repository with pre-existing local changes; those changes were preserved while adding the test harness and environment setup documentation.
 
 ## Verification results
 
@@ -70,7 +75,7 @@ The workspace has no Git metadata, so a Git diff or change attribution could not
 | TypeScript | `npx tsc --noEmit` passed. |
 | Production build | `npm run build` passed; Vite produced the production assets. |
 | Lint | `npm run lint` passed with no errors or warnings after the final lint cleanup. |
-| Automated frontend tests | Not run: `package.json` has no test script and no frontend test/spec files were found under `src/`. |
+| Automated frontend tests | **Passed:** `npm test` ran 3 files and 7 tests covering role landing paths, protected-route redirects/access, and authenticated 401 handling including the session-expired event. |
 | Local development server | `curl.exe -I http://localhost:5173` returned HTTP 200. This confirms the Vite page is served, not that browser flows or API requests work. |
 | Browser checks | A prior smoke check rendered the login and invitation acceptance screens. The protected-route navigation check was inconclusive. A further interactive browser check was not completed in this pass. |
 | Backend integration | Not verified; no authenticated API calls, database changes, migrations, or email delivery were exercised. |
@@ -80,10 +85,10 @@ The earlier dependency installation reported 12 moderate npm audit advisories. N
 ## Known limitations and risks
 
 1. The frontend contract alignment is based on the documented API, not a live end-to-end session. Differences in response fields, status codes, or permissions may surface during integration.
-2. No automated frontend tests currently cover authentication transitions, role redirects, lifecycle controls, invitation actions, or audit pagination.
+2. Automated coverage is an initial baseline; login form behavior, full session restoration, lifecycle controls, invitation actions, and audit pagination still need focused tests.
 3. Browser validation of protected routes and authenticated role experiences remains incomplete.
-4. The local Vite proxy expects the backend at `http://localhost:3000`.
+4. The backend has no local `.env` file in this checkout, so no database-backed or authenticated end-to-end workflow was run.
 
 ## Restart point
 
-With the documented API running at the configured proxy target, validate sign-in and route isolation for each role, then exercise Student/Staff management, account-status transitions, invitation acceptance/revocation/resend, and audit pagination against real API responses. Keep backend authorization as the security boundary and address any contract mismatch in coordination with the backend owner before changing client assumptions.
+With the documented API configured and running at the proxy target, validate sign-in and route isolation for each role, then exercise Student/Staff management, account-status transitions, invitation acceptance/revocation/resend, and audit pagination against real API responses. Keep backend authorization as the security boundary and address any contract mismatch in coordination with the backend owner before changing client assumptions.

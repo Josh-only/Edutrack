@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState, PageTitle } from '../components/PagePrimitives'
+import LocalInvitationLink from '../components/LocalInvitationLink'
 import { useAuth } from '../auth/useAuth'
 import type { AccountType, Invitation, InvitationPage, InvitationStatus } from '../services/api-models'
 import { getInvitations, resendInvitation, revokeInvitation } from '../services/administration'
@@ -20,6 +21,7 @@ export default function InvitationsPage() {
   const [retry, setRetry] = useState(0)
   const [actionError, setActionError] = useState('')
   const [feedback, setFeedback] = useState('')
+  const [localInvitationUrl, setLocalInvitationUrl] = useState('')
   const [workingId, setWorkingId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export default function InvitationsPage() {
     setWorkingId(invitation.id)
     setActionError('')
     setFeedback('')
+    setLocalInvitationUrl('')
     try {
       if (action === 'revoke') {
         await revokeInvitation(invitation.id)
@@ -53,6 +56,7 @@ export default function InvitationsPage() {
       } else {
         const replacement = await resendInvitation(invitation.id)
         setFeedback(`Replacement invitation #${replacement.id} queued for ${invitation.email}; delivery is asynchronous.`)
+        setLocalInvitationUrl(replacement.invitationUrl ?? '')
       }
       setLoading(true)
       setRetry((value) => value + 1)
@@ -76,6 +80,7 @@ export default function InvitationsPage() {
     <>
       <PageTitle title="Invitation management" description={isAdmin ? 'Review invitations across the school.' : 'Review only Student invitations you created. The backend enforces this scope.'} />
       {feedback && <p className="inline-success" role="status">{feedback}</p>}
+      {localInvitationUrl && <LocalInvitationLink url={localInvitationUrl} />}
       {actionError && <p className="inline-error" role="alert">{actionError}</p>}
       <form className="panel filter-bar" onSubmit={applyFilters}>
         <label>Status

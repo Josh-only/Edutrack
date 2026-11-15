@@ -44,9 +44,17 @@ export class StaffService {
           user, firstName: dto.firstName.trim(), lastName: dto.lastName.trim(),
           phoneNumber: dto.phoneNumber.trim(), department: dto.department.trim(), designation: dto.designation.trim(),
         }));
-        const invitation = await this.invitations.createFor(manager, user, actor.userId);
+        const createdInvitation = await this.invitations.createFor(manager, user, actor.userId);
         await this.audit.record({ actorUserId: actor.userId, action: 'staff.created', targetType: 'staff', targetId: profile.id }, manager);
-        return { ...this.toResponse(profile), invitation: { id: invitation.id, expiresAt: invitation.expiresAt, status: 'pending_delivery' } };
+        return {
+          ...this.toResponse(profile),
+          invitation: {
+            id: createdInvitation.invitation.id,
+            expiresAt: createdInvitation.invitation.expiresAt,
+            status: 'pending_delivery',
+            ...(createdInvitation.invitationUrl ? { invitationUrl: createdInvitation.invitationUrl } : {}),
+          },
+        };
       });
     } catch (error) {
       if (error instanceof ConflictException) throw error;

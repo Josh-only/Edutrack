@@ -1,4 +1,4 @@
-import { apiRequest, isRecord, requireNumber, requireString } from './api'
+import { apiRequest, isRecord, parseLocalInvitationUrl, requireNumber, requireString } from './api'
 import type { AccountStatus, StaffCreation, StaffMember } from './api-models'
 
 export type { StaffMember } from './api-models'
@@ -54,12 +54,17 @@ function parseCreation(value: unknown): StaffCreation {
       typeof value.invitation.expiresAt !== 'string') {
     throw new Error('The server returned invalid staff invitation details.')
   }
+  const invitationUrl = parseLocalInvitationUrl(
+    value.invitation.invitationUrl,
+    'The server returned invalid staff invitation details.',
+  )
   return {
     ...parseStaff(value),
     invitation: {
       id: requireNumber(value.invitation.id, 'The server returned invalid invitation details.'),
       expiresAt: value.invitation.expiresAt,
       status: 'pending_delivery',
+      ...(invitationUrl ? { invitationUrl } : {}),
     },
   }
 }

@@ -11,6 +11,8 @@ import {
   InvitationStatus,
   ListInvitationsQueryDto,
 } from './dto/list-invitations-query.dto.js';
+import { EmailOutbox } from '../notifications/entities/email-outbox.entity.js';
+import { digestInvitationToken } from './invitation-crypto.js';
 
 function listBuilder(rows: Record<string, unknown>[] = []) {
   const builder = {
@@ -34,11 +36,15 @@ function makeService(
   repository: Record<string, unknown>,
   dataSource = {},
   audit = {},
+  config: Record<string, unknown> = {
+    get: vi.fn().mockReturnValue(undefined),
+    getOrThrow: vi.fn().mockReturnValue('test-secret'),
+  },
 ) {
   return new InvitationsService(
     dataSource as never,
     audit as never,
-    {} as never,
+    config as never,
     repository as never,
   );
 }
@@ -164,6 +170,72 @@ describe('InvitationsService.list', () => {
   });
 });
 
+describe('InvitationsService.createFor', () => {
+  function makeCreationContext() {
+    const invitationRepository = {
+      create: vi.fn((value) => value),
+      save: vi.fn(async (value) => ({ id: 17, ...value })),
+    };
+    const outboxRepository = {
+      create: vi.fn((value) => value),
+      save: vi.fn(async (value) => value),
+    };
+    const manager = {
+      getRepository: vi.fn((entity: unknown) => {
+        if (entity === Invitation) return invitationRepository;
+        if (entity === EmailOutbox) return outboxRepository;
+        throw new Error('Unexpected repository request.');
+      }),
+    };
+    return { manager };
+  }
+
+  it('returns a local invitation URL only for explicitly enabled development without SMTP', async () => {
+    const { manager } = makeCreationContext();
+    const configValues: Record<string, string> = {
+      NODE_ENV: 'development',
+      LOCAL_INVITATION_LINKS: 'true',
+      JWT_SECRET: 'test-secret',
+    };
+    const config = {
+      get: vi.fn((name: string) => configValues[name]),
+      getOrThrow: vi.fn((name: string) => configValues[name]),
+    };
+    const service = makeService({}, {}, { record: vi.fn() }, config);
+    const user = { id: 22, email: 'invitee@example.test' } as User;
+
+    const result = await service.createFor(manager as never, user, admin.userId);
+
+    expect(result.invitationUrl).toBeDefined();
+    const url = result.invitationUrl;
+    const token = new URL(url ?? '').searchParams.get('token');
+    expect(token).toBeTruthy();
+    if (token) expect(digestInvitationToken(token)).toBe(result.invitation.tokenDigest);
+    expect(new URL(url ?? '').origin).toBe('http://localhost:5173');
+  });
+
+  it.each([
+    {
+      label: 'without explicit opt-in',
+      values: { NODE_ENV: 'development', JWT_SECRET: 'test-secret' },
+    },
+    {
+      label: 'when SMTP is configured',
+      values: { NODE_ENV: 'development', LOCAL_INVITATION_LINKS: 'true', SMTP_HOST: 'smtp.example.test', JWT_SECRET: 'test-secret' },
+    },
+  ])('does not return a local invitation URL $label', async ({ values }) => {
+    const { manager } = makeCreationContext();
+    const config = {
+      get: vi.fn((name: string) => values[name as keyof typeof values]),
+      getOrThrow: vi.fn((name: string) => values[name as keyof typeof values]),
+    };
+    const service = makeService({}, {}, { record: vi.fn() }, config);
+    const user = { id: 22, email: 'invitee@example.test' } as User;
+
+    await expect(service.createFor(manager as never, user, admin.userId)).resolves.not.toHaveProperty('invitationUrl');
+  });
+});
+
 describe('InvitationsService invitation actions', () => {
   it('rejects Staff revocation of an invitation created by someone else', async () => {
     const invitation = {
@@ -231,13 +303,17 @@ describe('InvitationsService invitation actions', () => {
       record: vi.fn().mockResolvedValue(undefined),
     });
     vi.spyOn(service, 'createFor').mockResolvedValue({
-      id: 5,
-      expiresAt: new Date('2025-01-03T00:00:00.000Z'),
-    } as Invitation);
+      invitation: {
+        id: 5,
+        expiresAt: new Date('2025-01-03T00:00:00.000Z'),
+      } as Invitation,
+      invitationUrl: 'http://localhost:5173/accept-invitation?token=local-token',
+    });
 
     await expect(service.resend(4, staff)).resolves.toMatchObject({
       id: 5,
       status: 'pending_delivery',
+      invitationUrl: 'http://localhost:5173/accept-invitation?token=local-token',
     });
     expect(old.tokenCiphertext).toBe('revoked');
     expect(old.revokedAt).toBeInstanceOf(Date);

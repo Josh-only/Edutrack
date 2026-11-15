@@ -1,6 +1,6 @@
 # EduTrack Phase 1 API Contract
 
-**Contract basis:** This document describes the backend implementation in this workspace as inspected on 2026-11-05. It does not claim that migrations have been applied or that a deployed API has been runtime-tested. Where implementation details are inconsistent or incomplete, they are called out rather than inferred.
+**Contract basis:** The Phase 1 account workflows were inspected on 2026-11-05; the academic MVP endpoints below describe the implementation added on 2026-11-15. This document does not claim that migrations have been applied or that a deployed API has been runtime-tested.
 
 Base URL for local development: `http://localhost:3000`. The Vite development proxy may expose the same API under `/api`; `/api` is not a backend route prefix.
 
@@ -134,8 +134,52 @@ The backend controllers expose the routes below. `POST` routes use Nest's defaul
 | `POST /invitations/:id/resend` | Revoke old invitation and create replacement          | `super_admin`; `staff` for Student invitations they created |
 | `GET /dashboard/overview`      | Super Admin dashboard counts                          | `super_admin`                                          |
 | `GET /audit-events`            | Read audit events                                     | `super_admin`                                          |
+| `GET /courses`                 | List courses visible to the current account           | Any active role; Students see their courses, Staff their assigned courses |
+| `POST /courses`                | Create a course                                       | `staff` for self-assigned courses; `super_admin`       |
+| `GET /courses/:id`             | Read course, roster and gradebook                     | Enrolled Student, assigned Staff, or `super_admin`     |
+| `PATCH /courses/:id`           | Update course                                         | Assigned `staff` or `super_admin`                      |
+| `DELETE /courses/:id`          | Delete a course with no enrollment or assessment history | `super_admin`                                       |
+| `POST /courses/:id/enrollments` | Enroll a Student                                      | Assigned `staff` or `super_admin`                      |
+| `PATCH /enrollments/:id/withdraw` | Withdraw an enrollment                              | Assigned `staff` or `super_admin`                      |
+| `GET /courses/:id/attendance`  | Read class attendance (optional `date=YYYY-MM-DD`)    | Enrolled Student (own records), assigned Staff, or `super_admin` |
+| `POST /courses/:id/attendance` | Record attendance for every active enrollee           | Assigned `staff` or `super_admin`                      |
+| `GET /courses/:id/assessments` | Read assessments and visible grades                  | Enrolled Student (own grades), assigned Staff, or `super_admin` |
+| `POST /courses/:id/assessments` | Create an assignment or exam                         | Assigned `staff` or `super_admin`                      |
+| `PUT /assessments/:id/grades`  | Add or update enrolled Students' scores               | Assigned `staff` or `super_admin`                      |
+| `GET /reports/academic`        | Course enrollment, attendance and grade summary       | `staff` (assigned courses), `super_admin`              |
+| `GET /reports/student`         | Current Student's course, attendance and grade summary | `student` (own records only)                          |
+| `GET /notifications`           | List current account's in-app notices                | Any active role                                        |
+| `PATCH /notifications/:id/read` | Mark own in-app notice as read                       | Notification owner                                     |
 
 There is **no** `POST /users/register`, `GET /staff/eligible-users`, `DELETE /students/:id`, `DELETE /staff/:id`, or invitation/outbox delivery-status endpoint. These are **NOT IMPLEMENTED**. The registration DTO files are not wired to a registration controller route.
+
+## Academic MVP workflows
+
+The academic schema is introduced by `AcademicMvp20261115000000`; it must be applied through the normal TypeORM migration process after the database target and backup have been confirmed. Application startup does not synchronize the schema.
+
+Course codes are unique. A Staff account can create and manage courses assigned to its own Staff profile; Super Admin can assign any existing Staff profile. Students only see courses with an active enrollment. Course deletion is restricted to Super Admin and rejected when any enrollment or assessment history exists.
+
+Enrollment uses `POST /courses/:id/enrollments` with `{ "studentId": 42 }`. Withdrawal changes its status to `dropped` and preserves academic history; a dropped Student may be re-enrolled in the same course.
+
+Attendance requests use an ISO date and exactly one present/absent value for every active Student:
+
+```json
+{
+  "date": "2026-11-15",
+  "records": [
+    { "studentId": 42, "status": "present" },
+    { "studentId": 43, "status": "absent" }
+  ]
+}
+```
+
+Attendance is unique per enrollment and date; saving the same date updates that register. A Student receives an in-app notice when first marked absent for that date.
+
+Create an assignment/exam with `POST /courses/:id/assessments` and `{ "title": "Quiz 1", "type": "assignment", "maxScore": 20, "date": "2026-11-15" }`. Submit scores to `PUT /assessments/:id/grades` as `{ "grades": [{ "studentId": 42, "score": 18 }] }`. Scores must be non-negative and no greater than the assessment maximum, and only active course enrollees are eligible. Students receive in-app notices when a grade is added or changed.
+
+`GET /reports/academic` returns per-course enrollment counts, attendance rates (present records divided by recorded attendance), and grade averages (mean score as a percentage of maximum). A null rate indicates that no attendance/grade data has been recorded. The web client can export this summary as CSV; course detail also exports the visible attendance and grade rows as CSV. In-app notifications are private to the authenticated user; the academic MVP does not send email alerts.
+
+`GET /reports/student` returns the authenticated Student's active course count, overall attendance rate, grade average, and visible course list. It never accepts a Student ID; a Student cannot request another account's summary.
 
 ### `GET /` (scaffold only)
 
@@ -279,12 +323,13 @@ Creates a pending Student User and linked profile, a time-limited invitation, em
   "invitation": {
     "id": 7,
     "expiresAt": "2026-11-07T10:00:00.000Z",
-    "status": "pending_delivery"
+    "status": "pending_delivery",
+    "invitationUrl": "http://localhost:5173/accept-invitation?token=<local-token>"
   }
 }
 ```
 
-`pending_delivery` is the response label at creation time; delivery is asynchronous and the outbox may later send or fail. No raw token is returned.
+`pending_delivery` is the response label at creation time; delivery is asynchronous and the outbox may later send or fail. `invitationUrl` is omitted by default. It is returned only when `NODE_ENV=development`, `LOCAL_INVITATION_LINKS=true`, and SMTP is not configured; the link is a bearer secret that expires in 48 hours. This local-only option is rejected unless `NODE_ENV` is exactly `development`. Invitation list responses never include tokens or URLs.
 
 - **Errors:** `400` invalid body; `401` invalid/non-active session; `403` Student role; `409` incomplete Staff account setup or duplicate email in User/Student records.
 
@@ -390,11 +435,13 @@ Creates a pending Staff User and linked Staff profile, invitation, outbox task, 
   "invitation": {
     "id": 9,
     "expiresAt": "2026-11-07T10:00:00.000Z",
-    "status": "pending_delivery"
+    "status": "pending_delivery",
+    "invitationUrl": "http://localhost:5173/accept-invitation?token=<local-token>"
   }
 }
 ```
 
+- `invitationUrl` follows the same explicit development-only opt-in described for `POST /students`.
 - **Errors:** `400` validation; `401` invalid/non-active session; `403` Staff or Student role; `409` email already registered as a User or Student profile.
 - **Uniqueness note:** This endpoint checks both User and Student profile emails and never links a legacy Student row. The schema does not provide a cross-table unique constraint.
 
@@ -499,10 +546,12 @@ For all invitation management operations, Super Admin may manage invitations acr
 {
   "id": 10,
   "expiresAt": "2026-11-07T10:00:00.000Z",
-  "status": "pending_delivery"
+  "status": "pending_delivery",
+  "invitationUrl": "http://localhost:5173/accept-invitation?token=<local-token>"
 }
 ```
 
+- `invitationUrl` is omitted unless the explicit local-development setting is enabled and SMTP is not configured.
 - **Errors:** `400` malformed ID; `401` invalid/non-active session; `403` wrong role/target; `404` invitation not found; `409` invitation was accepted or account is not pending.
 - **Note:** Implementation permits resending an already revoked/expired invitation if its account remains pending. The prior invitation is marked revoked; only the replacement can be accepted. Outbox delivery state is not exposed by an API.
 

@@ -35,9 +35,17 @@ export class StudentsService {
           accountType: AccountType.STUDENT, status: AccountStatus.PENDING,
         }));
         const student = await students.save(students.create({ user, email, firstName: dto.firstName.trim(), lastName: dto.lastName.trim() }));
-        const invitation = await this.invitations.createFor(manager, user, actor.userId);
+        const createdInvitation = await this.invitations.createFor(manager, user, actor.userId);
         await this.audit.record({ actorUserId: actor.userId, action: 'student.registered', targetType: 'student', targetId: student.id }, manager);
-        return { ...this.toResponse(student), invitation: { id: invitation.id, expiresAt: invitation.expiresAt, status: 'pending_delivery' } };
+        return {
+          ...this.toResponse(student),
+          invitation: {
+            id: createdInvitation.invitation.id,
+            expiresAt: createdInvitation.invitation.expiresAt,
+            status: 'pending_delivery',
+            ...(createdInvitation.invitationUrl ? { invitationUrl: createdInvitation.invitationUrl } : {}),
+          },
+        };
       });
     } catch (error) {
       if (error instanceof ConflictException) throw error;

@@ -18,6 +18,8 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AcademicModule } from './academic/academic.module.js';
+import { AcademicMvp20261115000000 } from './migrations/20261115000000-academic-mvp.js';
 
 @Module({
   imports: [
@@ -38,7 +40,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
         autoLoadEntities: true,
         synchronize: false,
         migrationsTransactionMode: 'each',
-        migrations: [BaselineUsersStudents20261102000000, CreateStaffTable20261103000000, AddSuperAdminAccountType20261104000000, PhaseOneLifecycle20261104000001],
+        migrations: [BaselineUsersStudents20261102000000, CreateStaffTable20261103000000, AddSuperAdminAccountType20261104000000, PhaseOneLifecycle20261104000001, AcademicMvp20261115000000],
       }),
     }),
     StudentsModule,
@@ -49,6 +51,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     NotificationsModule,
     AuditModule,
     AdminModule,
+    AcademicModule,
   ],
   controllers: [AppController],
   providers: [AppService],

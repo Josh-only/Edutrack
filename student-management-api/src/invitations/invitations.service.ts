@@ -26,6 +26,11 @@ export interface InvitationListItem {
   creator: { id: number; email: string } | null;
 }
 
+export interface CreatedInvitation {
+  invitation: Invitation;
+  invitationUrl?: string;
+}
+
 @Injectable()
 export class InvitationsService {
   constructor(
@@ -35,7 +40,7 @@ export class InvitationsService {
     @InjectRepository(Invitation) private readonly invitations: Repository<Invitation>,
   ) {}
 
-  async createFor(manager: EntityManager, user: User, actorUserId: number | null): Promise<Invitation> {
+  async createFor(manager: EntityManager, user: User, actorUserId: number | null): Promise<CreatedInvitation> {
     const token = randomBytes(32).toString('base64url');
     const invitation = await manager.getRepository(Invitation).save(manager.getRepository(Invitation).create({
       user,
@@ -56,7 +61,8 @@ export class InvitationsService {
       attemptCount: 0,
     }));
     await this.audit.record({ actorUserId, action: 'invitation.issued', targetType: 'invitation', targetId: invitation.id }, manager);
-    return invitation;
+    const invitationUrl = this.localInvitationUrl(token);
+    return { invitation, ...(invitationUrl ? { invitationUrl } : {}) };
   }
 
   async accept(dto: AcceptInvitationDto) {
@@ -195,8 +201,27 @@ export class InvitationsService {
       await repository.save(old);
       await this.audit.record({ actorUserId: actor.userId, action: 'invitation.resent', targetType: 'invitation', targetId: old.id }, manager);
       const replacement = await this.createFor(manager, user, actor.userId);
-      return { id: replacement.id, expiresAt: replacement.expiresAt, status: 'pending_delivery' };
+      return {
+        id: replacement.invitation.id,
+        expiresAt: replacement.invitation.expiresAt,
+        status: 'pending_delivery',
+        ...(replacement.invitationUrl ? { invitationUrl: replacement.invitationUrl } : {}),
+      };
     });
+  }
+
+  private localInvitationUrl(token: string): string | undefined {
+    if (
+      this.config.get<string>('NODE_ENV') !== 'development' ||
+      this.config.get<string>('LOCAL_INVITATION_LINKS') !== 'true' ||
+      this.config.get<string>('SMTP_HOST')?.trim()
+    ) {
+      return undefined;
+    }
+
+    const url = new URL('http://localhost:5173/accept-invitation');
+    url.searchParams.set('token', token);
+    return url.toString();
   }
 
   private assertCanManage(user: User, createdByUserId: number | null, actor: AuthenticatedUser) {
