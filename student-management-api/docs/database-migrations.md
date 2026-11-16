@@ -23,7 +23,7 @@ Do not use this procedure against production until backup, schema review, and de
 
 ## Fresh database
 
-Create an empty database with the required privileges, configure its connection, build, then run `npm run migration:run`. The baseline creates Users/Students, the retained Staff migration creates Staff, and subsequent additive migrations introduce account lifecycle, invitation, outbox, Student linkage, audit, and academic MVP structures.
+Create an empty database with the required privileges, configure its connection, build, then run `npm run migration:run`. The baseline creates Users/Students, the retained Staff migration creates Staff, and subsequent additive migrations introduce account lifecycle, invitation, outbox, Student linkage, audit, academic MVP, and temporary-password expiry structures.
 
 ## Rollback
 
@@ -36,3 +36,7 @@ No migration assigns `students.user_id`. The three legacy Student records remain
 ## Academic MVP migration
 
 `AcademicMvp20261115000000` adds courses, enrollments, attendance, assessments, grades, and per-user in-app notifications. It is registered in both the runtime module and the CLI data source. It does not modify existing Student, Staff, or User rows. Course/enrollment/assessment history uses restrictive foreign keys; do not revert this migration after academic records have been entered.
+
+## Temporary account passwords migration
+
+`TemporaryAccountPasswords20261116000000` adds the nullable `users.temporaryPasswordExpiresAt` column. Apply it before running the API version that implements generated temporary passwords. It is additive and does not change existing account credentials or statuses. Confirm the database target and backup before applying migrations; no migration has been applied to a database as part of this code change.

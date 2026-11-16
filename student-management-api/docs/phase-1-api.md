@@ -1,6 +1,6 @@
 # EduTrack Phase 1 API Contract
 
-**Contract basis:** The Phase 1 account workflows were inspected on 2026-11-05; the academic MVP endpoints below describe the implementation added on 2026-11-15. This document does not claim that migrations have been applied or that a deployed API has been runtime-tested.
+**Contract basis:** The Phase 1 account workflows were inspected on 2026-11-05; the academic MVP endpoints describe the implementation added on 2026-11-15; temporary-password onboarding was added on 2026-11-16. This document does not claim that migrations have been applied or that a deployed API has been runtime-tested.
 
 Base URL for local development: `http://localhost:3000`. The Vite development proxy may expose the same API under `/api`; `/api` is not a backend route prefix.
 
@@ -14,7 +14,9 @@ JSON request bodies use `Content-Type: application/json`. Authenticated requests
 Authorization: Bearer <accessToken>
 ```
 
-`POST /users/login` and `POST /invitations/accept` are public. All other Phase 1 endpoints require a valid Bearer JWT; `GET /` is a public scaffold route. JWTs expire after one hour. For each protected request, the JWT strategy loads the account from the database, requires `status: "active"`, and checks that Student/Staff accounts have their corresponding profile. Role authorization uses the database-loaded account type, not a role supplied by the client.
+`POST /users/login` and the legacy `POST /invitations/accept` are public. All other Phase 1 endpoints require a valid Bearer JWT; `GET /` is a public scaffold route. JWTs expire after one hour. For each protected request, the JWT strategy loads the account from the database, requires `status: "active"`, and checks that Student/Staff accounts have their corresponding profile. Role authorization uses the database-loaded account type, not a role supplied by the client.
+
+New Staff and Student accounts are provisioned with a generated temporary password. It is returned only in the create/reset response, expires if unused for 24 hours, and its expiry is cleared on first successful login. After first login it remains valid until changed by the account owner. A Super Admin can issue one to an existing linked pending account; this activates the account and revokes its outstanding invitations. Legacy unlinked Student rows are never modified.
 
 Only active accounts can log in or continue using an existing token. `pending`, `inactive`, and `suspended` accounts receive `401`; an active Student/Staff account missing its profile receives `409`. Status changes therefore take effect on the next protected request.
 
@@ -116,16 +118,18 @@ The backend controllers expose the routes below. `POST` routes use Nest's defaul
 | `POST /users/login`            | Sign in                                               | Public; throttled                                      |
 | `GET /users/me`                | Read current account                                  | Any active role                                        |
 | `PATCH /users/me`              | Change own email                                      | Any active role                                        |
+| `PATCH /users/me/password`     | Change own password                                   | Any active role                                        |
+| `POST /users/:id/temporary-password` | Issue password to a pending Staff/Student account | `super_admin`                                      |
 | `GET /students`                | Student directory                                     | `staff`, `super_admin`                                 |
 | `GET /students/me`             | Read the Student profile linked to current account    | Active JWT; intended for `student`                     |
 | `GET /students/:id`            | Read one Student                                      | `staff`, `super_admin`; `student` only for own profile |
-| `POST /students`               | Register Student account/profile and issue invitation | `staff`, `super_admin`                                 |
+| `POST /students`               | Register Student account/profile and issue temporary password | `staff`, `super_admin`                        |
 | `PATCH /students/:id`          | Update Student profile                                | `staff`, `super_admin`                                 |
 | `PATCH /students/:id/status`   | Change linked Student account status                  | `super_admin`                                          |
 | `GET /staff`                   | Staff directory                                       | `super_admin`                                          |
 | `GET /staff/me`                | Read own Staff profile                                | `staff`, `super_admin`                                 |
 | `GET /staff/:id`               | Read Staff profile                                    | `super_admin`                                          |
-| `POST /staff`                  | Create Staff account/profile and issue invitation     | `super_admin`                                          |
+| `POST /staff`                  | Create Staff account/profile and issue temporary password | `super_admin`                                       |
 | `PATCH /staff/:id`             | Update Staff profile/account email                    | `super_admin`                                          |
 | `PATCH /staff/:id/status`      | Change linked Staff account status                    | `super_admin`                                          |
 | `GET /invitations`             | List and filter invitations                         | `super_admin`; `staff` for Student invitations they created |
@@ -230,7 +234,7 @@ Validates credentials and returns a one-hour JWT. Role information is not accept
 
 ### `PATCH /users/me`
 
-Changes only the authenticated account's email. No password-change endpoint is implemented.
+Changes only the authenticated account's email.
 
 - **Authentication/role:** Bearer JWT; any active account type.
 - **Headers:** `Authorization`, `Content-Type`.
@@ -245,6 +249,47 @@ Changes only the authenticated account's email. No password-change endpoint is i
 - **Success (`200`):** Updated account identity object, including `status`.
 - **Errors:** `400` invalid email; `401` invalid/non-active session; `409` email already registered or Student profile setup incomplete.
 - **Uniqueness note:** Email is normalized to lowercase. The service checks for matching Student profile emails, including unlinked legacy rows, before changing a User email. There is no database-level cross-table unique constraint, so writes from independent clients may still race.
+
+### `PATCH /users/me/password`
+
+Changes the authenticated account's password after verifying the current password. This is also where a user can replace a temporary password after signing in.
+
+- **Authentication/role:** Bearer JWT; any active account type.
+- **Headers:** `Authorization`, `Content-Type`.
+- **Body:**
+
+```json
+{ "currentPassword": "fictional-current-password", "newPassword": "fictional-new-password" }
+```
+
+Both passwords must contain 8–128 characters. The new password must differ from the current password.
+
+- **Success (`200`):** Account identity object; password data is never returned.
+- **Errors:** `400` invalid body; `401` invalid session or incorrect current password; `409` new password matches the current password.
+- **Lifecycle:** Clears any temporary-password expiry and records a password-change audit event.
+
+### `POST /users/:id/temporary-password`
+
+Issues a new temporary password to an existing linked Staff or Student account that is still `pending`. It activates the account and revokes all outstanding invitations in the same transaction. This endpoint must not be used for unlinked legacy Student records.
+
+- **Authentication/role:** Bearer JWT; `super_admin` only.
+- **Path:** `id` is the User ID (not the Staff or Student profile ID), parsed as an integer.
+- **Headers:** `Authorization`.
+- **Query/body:** None.
+- **Success (`201`):**
+
+```json
+{
+  "email": "learner@example.test",
+  "accountType": "student",
+  "temporaryPassword": "<one-time-secret>",
+  "expiresAt": "2026-11-17T10:00:00.000Z"
+}
+```
+
+The raw password is returned once and is not stored in logs or audit events. It expires after 24 hours if unused. The first successful login clears the expiry; afterward the password remains valid until changed by the account owner.
+
+- **Errors:** `400` malformed User ID; `401` invalid/non-active session; `403` non-Super Admin; `404` User not found; `409` account is not a pending Staff/Student or its linked profile is missing.
 
 ## Student endpoints
 
@@ -294,7 +339,7 @@ Changes only the authenticated account's email. No password-change endpoint is i
 
 ### `POST /students`
 
-Creates a pending Student User and linked profile, a time-limited invitation, email-outbox work, and an audit event in one database transaction.
+Creates an active Student User and linked profile, generates a one-time temporary password, and records an audit event in one database transaction. Email and invitation setup are not required.
 
 - **Authentication/roles:** Bearer JWT; `staff`, `super_admin`.
 - **Headers:** `Authorization`, `Content-Type`.
@@ -310,7 +355,7 @@ Creates a pending Student User and linked profile, a time-limited invitation, em
 
 `email`: valid email string, trimmed and lowercased before validation. `firstName` and `lastName`: non-empty after trimming; the DTO defines no maximum name length.
 
-- **Success (`201`):** The implementation returns the profile object **directly**, extended with invitation metadata; it does not return a `{ "message": ..., "student": ... }` wrapper:
+- **Success (`201`):** The implementation returns the profile object **directly**, extended with the temporary credential; it does not return a `{ "message": ..., "student": ... }` wrapper:
 
 ```json
 {
@@ -319,17 +364,15 @@ Creates a pending Student User and linked profile, a time-limited invitation, em
   "firstName": "Ada",
   "lastName": "Okafor",
   "email": "learner@example.test",
-  "status": "pending",
-  "invitation": {
-    "id": 7,
-    "expiresAt": "2026-11-07T10:00:00.000Z",
-    "status": "pending_delivery",
-    "invitationUrl": "http://localhost:5173/accept-invitation?token=<local-token>"
+  "status": "active",
+  "credential": {
+    "temporaryPassword": "<one-time-secret>",
+    "expiresAt": "2026-11-17T10:00:00.000Z"
   }
 }
 ```
 
-`pending_delivery` is the response label at creation time; delivery is asynchronous and the outbox may later send or fail. `invitationUrl` is omitted by default. It is returned only when `NODE_ENV=development`, `LOCAL_INVITATION_LINKS=true`, and SMTP is not configured; the link is a bearer secret that expires in 48 hours. This local-only option is rejected unless `NODE_ENV` is exactly `development`. Invitation list responses never include tokens or URLs.
+The temporary password is displayed only in this response and expires 24 hours after issuance if unused. The first successful login clears the expiry; afterward the password remains valid until changed by the account owner. The password and its hash are never included in audit events or subsequent profile responses.
 
 - **Errors:** `400` invalid body; `401` invalid/non-active session; `403` Student role; `409` incomplete Staff account setup or duplicate email in User/Student records.
 
@@ -400,7 +443,7 @@ Changes the status of a linked Student account. An unlinked legacy Student has n
 
 ### `POST /staff`
 
-Creates a pending Staff User and linked Staff profile, invitation, outbox task, and audit event transactionally. This API creates the User itself; it does not take a pre-existing `userId`.
+Creates an active Staff User and linked Staff profile, generates a one-time temporary password, and records an audit event transactionally. This API creates the User itself; it does not take a pre-existing `userId`.
 
 - **Authentication/roles:** Bearer JWT; `super_admin` only.
 - **Headers:** `Authorization`, `Content-Type`.
@@ -431,17 +474,15 @@ Creates a pending Staff User and linked Staff profile, invitation, outbox task, 
   "phoneNumber": "+2348000000000",
   "department": "Science",
   "designation": "Coordinator",
-  "status": "pending",
-  "invitation": {
-    "id": 9,
-    "expiresAt": "2026-11-07T10:00:00.000Z",
-    "status": "pending_delivery",
-    "invitationUrl": "http://localhost:5173/accept-invitation?token=<local-token>"
+  "status": "active",
+  "credential": {
+    "temporaryPassword": "<one-time-secret>",
+    "expiresAt": "2026-11-17T10:00:00.000Z"
   }
 }
 ```
 
-- `invitationUrl` follows the same explicit development-only opt-in described for `POST /students`.
+The temporary password is displayed only in this response and expires after 24 hours if unused. The first successful login clears the expiry; afterward the password remains valid until changed by the account owner.
 - **Errors:** `400` validation; `401` invalid/non-active session; `403` Staff or Student role; `409` email already registered as a User or Student profile.
 - **Uniqueness note:** This endpoint checks both User and Student profile emails and never links a legacy Student row. The schema does not provide a cross-table unique constraint.
 
@@ -465,9 +506,9 @@ Updates Staff profile and optionally the linked User email. There is no Staff se
 - **Success (`200`):** `{ "id": 8, "userId": 21, "status": "inactive" }`.
 - **Errors:** `400` invalid DTO/status transition, malformed ID, or missing suspension reason; `401` invalid/non-active session; `403` Staff or Student role; `404` profile not found.
 
-## Invitation endpoints
+## Legacy invitation endpoints
 
-Invitations are created as part of successful Student/Staff creation. No separate invitation-create endpoint exists.
+New account creation no longer creates invitations; it returns a temporary password instead. These endpoints remain for historical invitations and recovery of accounts still in `pending` status. Issuing a temporary password to a pending linked account revokes its outstanding invitations.
 
 For all invitation management operations, Super Admin may manage invitations across the school. Staff may list, revoke, or resend only Student invitations whose `createdByUserId` matches the authenticated Staff user. Student users cannot use invitation-management endpoints. This creator check is enforced by service/query logic in addition to the route role guard.
 
@@ -557,11 +598,11 @@ For all invitation management operations, Super Admin may manage invitations acr
 
 ## Account status lifecycle
 
-Statuses are stored on User accounts. Only Super Admin may use status-update routes. Invitation acceptance is the only implemented `pending → active` operation; Super Admin status endpoints reject all transitions from `pending`.
+Statuses are stored on User accounts. Only Super Admin may use status-update routes. A pending account can be activated by accepting a valid legacy invitation or by a Super Admin issuing a temporary password; status-update routes reject other transitions from `pending`.
 
 | From        | To          | Permitted actor/path                                     | Additional rule                                  |
 | ----------- | ----------- | -------------------------------------------------------- | ------------------------------------------------ |
-| `pending`   | `active`    | Public invitation acceptance, `POST /invitations/accept` | Valid, unused, unexpired invitation required.    |
+| `pending`   | `active`    | Legacy invitation acceptance or Super Admin password issuance | Invitation must be valid, unused, and unexpired; password issuance requires a linked Staff/Student profile. |
 | `active`    | `inactive`  | Super Admin, Student or Staff status endpoint            | No reason required.                              |
 | `active`    | `suspended` | Super Admin, Student or Staff status endpoint            | Non-blank `reason` required (maximum 500 chars). |
 | `inactive`  | `active`    | Super Admin, Student or Staff status endpoint            | —                                                |
@@ -634,9 +675,9 @@ Counts are integers. `students` and `staff` count profile rows, including unlink
 
 ## Email delivery and operational behavior
 
-Student/Staff creation writes an invitation and email-outbox row in the same transaction as account/profile creation. The email processor sends asynchronously when SMTP is configured, retries delivery errors with backoff, and marks a task failed after six attempts. Missing SMTP leaves tasks pending. Email configuration uses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `EMAIL_FROM`; `INVITATION_BASE_URL` optionally sets the frontend acceptance URL. No endpoint reads outbox state, and creation does not wait for email delivery.
+Temporary-password account creation does not depend on email or SMTP. Historical invitation emails are still processed asynchronously when SMTP is configured; the processor retries delivery errors with backoff and marks a task failed after six attempts. Missing SMTP leaves those legacy tasks pending. Email configuration uses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `EMAIL_FROM`; `INVITATION_BASE_URL` optionally sets the frontend acceptance URL. No endpoint reads outbox state.
 
-Required profile strings are trimmed before DTO validation, so whitespace-only required fields fail validation. Email values are trimmed and lowercased before validation and persistence. Student/Staff creation and profile/own-account email mutations check for collisions in both User and Student tables, preserving unlinked legacy Students and never auto-linking them. These checks are application-level and run in write transactions; the schema has no cross-table unique constraint, so concurrent writes through independent database clients are not protected by a global uniqueness guarantee. No migration or existing-row cleanup was introduced.
+Required profile strings are trimmed before DTO validation, so whitespace-only required fields fail validation. Email values are trimmed and lowercased before validation and persistence. Student/Staff creation and profile/own-account email mutations check for collisions in both User and Student tables, preserving unlinked legacy Students and never auto-linking them. These checks are application-level and run in write transactions; the schema has no cross-table unique constraint, so concurrent writes through independent database clients are not protected by a global uniqueness guarantee. The additive temporary-password migration adds only a nullable expiry column and does not change existing credentials, statuses, or legacy Student links.
 
 ## Legacy records and database contract
 
@@ -646,6 +687,6 @@ TypeORM `synchronize` is disabled. See `docs/database-migrations.md` for the mig
 
 ## Frontend integration contract notes
 
-The backend login account type includes `super_admin`. `POST /students` returns the Student object plus `invitation` directly (not `{message, student}`). `POST /staff` accepts `email` and profile fields and creates its own User; `/staff/eligible-users` and a request `userId` are not part of this API. Student/Staff response fields include account `status`; the Student status is nullable for legacy unlinked rows. Staff directory management is Super Admin-only; Staff gets `GET /staff/me` and Student profiles through `/students/me`. Ordinary permanent-delete calls are not supported. Invitation acceptance, listing/actions, status management, Super Admin overview, and audit history endpoints are described above; outbox-status endpoints do not exist.
+The backend login account type includes `super_admin`. `POST /students` returns the Student profile directly with a nested one-time `credential` object; `POST /staff` does the same for Staff and creates its own User. `/staff/eligible-users` and a request `userId` are not part of this API. Student/Staff response fields include account `status`; the Student status is nullable for legacy unlinked rows. Staff directory management is Super Admin-only; Staff gets `GET /staff/me` and Student profiles through `/students/me`. Ordinary permanent-delete calls are not supported. Legacy invitation acceptance/management, temporary-password issuance, status management, Super Admin overview, and audit history endpoints are described above; outbox-status endpoints do not exist.
 
 The smallest safe frontend compatibility correction is to align frontend API types and flows to these backend responses and role rules, rather than wrapping/changing successful backend responses to preserve the obsolete two-role CRUD contract. Do not implement until the supervisor approves this contract and the remaining response/validation caveats in `docs/phase-1-api-readiness.md`.

@@ -84,7 +84,7 @@ export default function LoginPage() {
             </button>
             {(notice || error) && <p className="error-message" role="alert">{error || notice}</p>}
           </form>
-          <p className="login-note">Invitation accounts are activated from the secure link sent to your email.</p>
+          <p className="login-note">New accounts receive a temporary password from their administrator.</p>
         </div>
       </section>
     </main>

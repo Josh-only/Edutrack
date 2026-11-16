@@ -9,12 +9,18 @@ import type { AuthenticatedUser } from '../auth/current-user.decorator.js';
 describe('StaffService', () => {
   const staffRepository = { find: vi.fn(), findOne: vi.fn() };
   const userRepository = { findOne: vi.fn() };
-  const invitations = { createFor: vi.fn() };
+  const usersService = {
+    generateTemporaryCredential: vi.fn().mockResolvedValue({
+      temporaryPassword: 'a-generated-temporary-password',
+      passwordHash: 'temporary-hash',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    }),
+  };
   const audit = { record: vi.fn().mockResolvedValue(undefined) };
   let service: StaffService;
   const actor: AuthenticatedUser = { userId: 1, email: 'admin@example.test', accountType: AccountType.SUPER_ADMIN, status: AccountStatus.ACTIVE };
 
-  beforeEach(() => { vi.clearAllMocks(); service = new StaffService({} as never, invitations as never, audit as never, staffRepository as never, userRepository as never); });
+  beforeEach(() => { vi.clearAllMocks(); service = new StaffService({} as never, usersService as never, audit as never, staffRepository as never, userRepository as never); });
 
   it('returns only the current Staff profile from the authenticated user ID', async () => {
     const user = { id: 2, email: 'staff@example.test', accountType: AccountType.STAFF, status: AccountStatus.ACTIVE } as User;
@@ -35,16 +41,23 @@ describe('StaffService', () => {
     const studentRepo = { findOne: vi.fn().mockResolvedValue(null) };
     const manager = { getRepository: (entity: unknown) => entity === UserEntity ? userRepo : entity === Student ? studentRepo : staffRepo };
     const dataSource = { transaction: vi.fn(async (callback) => callback(manager)) };
-    invitations.createFor.mockResolvedValue({
-      invitation: { id: 7, expiresAt: new Date() },
-      invitationUrl: 'http://localhost:5173/accept-invitation?token=local-token',
-    });
-    service = new StaffService(dataSource as never, invitations as never, audit as never, staffRepository as never, userRepository as never);
+    service = new StaffService(dataSource as never, usersService as never, audit as never, staffRepository as never, userRepository as never);
     const response = await service.create({ email: ' STAFF@example.test ', firstName: 'Ada', lastName: 'Okafor', phoneNumber: '000', department: 'Science', designation: 'Teacher' }, actor);
-    expect(userRepo.save).toHaveBeenCalledWith(expect.objectContaining({ email: 'staff@example.test', accountType: AccountType.STAFF, status: AccountStatus.PENDING }));
-    expect(invitations.createFor).toHaveBeenCalled();
-    expect(response).toMatchObject({ userId: 22, id: 33, email: 'staff@example.test', status: AccountStatus.PENDING, invitation: { id: 7, status: 'pending_delivery' } });
-    expect(response.invitation.invitationUrl).toBe('http://localhost:5173/accept-invitation?token=local-token');
+    expect(userRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'staff@example.test',
+      accountType: AccountType.STAFF,
+      status: AccountStatus.ACTIVE,
+      passwordHash: 'temporary-hash',
+      temporaryPasswordExpiresAt: expect.any(Date),
+    }));
+    expect(usersService.generateTemporaryCredential).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      userId: 22,
+      id: 33,
+      email: 'staff@example.test',
+      status: AccountStatus.ACTIVE,
+      credential: { temporaryPassword: 'a-generated-temporary-password' },
+    });
   });
 
   it('rejects Staff creation when the email belongs to a legacy Student profile', async () => {
@@ -52,13 +65,13 @@ describe('StaffService', () => {
     const students = { findOne: vi.fn().mockResolvedValue({ id: 4, user: null }) };
     const manager = { getRepository: (entity: unknown) => entity === UserEntity ? users : entity === Student ? students : {} };
     const dataSource = { transaction: vi.fn(async (callback) => callback(manager)) };
-    service = new StaffService(dataSource as never, invitations as never, audit as never, staffRepository as never, userRepository as never);
+    service = new StaffService(dataSource as never, usersService as never, audit as never, staffRepository as never, userRepository as never);
 
     await expect(service.create({
       email: 'legacy@example.test', firstName: 'Ada', lastName: 'Okafor', phoneNumber: '000',
       department: 'Science', designation: 'Teacher',
     }, actor)).rejects.toBeInstanceOf(ConflictException);
     expect(users.save).not.toHaveBeenCalled();
-    expect(invitations.createFor).not.toHaveBeenCalled();
+    expect(usersService.generateTemporaryCredential).not.toHaveBeenCalled();
   });
 });

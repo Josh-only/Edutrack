@@ -36,6 +36,9 @@ export class User {
   @Column({ type: 'enum', enum: AccountStatus, default: AccountStatus.ACTIVE })
   status: AccountStatus;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  temporaryPasswordExpiresAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

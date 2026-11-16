@@ -7,7 +7,13 @@ import type { AuthenticatedUser } from '../auth/current-user.decorator.js';
 describe('StudentsService', () => {
   const studentRepository = { find: vi.fn(), findOne: vi.fn() };
   const dataSource = { transaction: vi.fn() };
-  const invitations = { createFor: vi.fn() };
+  const usersService = {
+    generateTemporaryCredential: vi.fn().mockResolvedValue({
+      temporaryPassword: 'a-generated-temporary-password',
+      passwordHash: 'temporary-hash',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    }),
+  };
   const audit = { record: vi.fn() };
   let service: StudentsService;
   const studentUser = { id: 14, email: 'learner@example.test', accountType: AccountType.STUDENT, status: AccountStatus.ACTIVE } as User;
@@ -16,7 +22,7 @@ describe('StudentsService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new StudentsService(dataSource as never, invitations as never, audit as never, studentRepository as never);
+    service = new StudentsService(dataSource as never, usersService as never, audit as never, studentRepository as never);
   });
 
   it('returns a Student only to its linked account', async () => {
@@ -49,18 +55,15 @@ describe('StudentsService', () => {
     };
     const manager = { getRepository: (entity: unknown) => entity === User ? users : students };
     dataSource.transaction.mockImplementation(async (callback) => callback(manager));
-    invitations.createFor.mockResolvedValue({
-      invitation: { id: 26, expiresAt: new Date('2026-11-17T00:00:00.000Z') },
-      invitationUrl: 'http://localhost:5173/accept-invitation?token=local-token',
-    });
-
     const response = await service.createStudent({
       email: 'new-student@example.test',
       firstName: 'Ada',
       lastName: 'Okafor',
     }, { ...actor, accountType: AccountType.SUPER_ADMIN });
 
-    expect(response.invitation.invitationUrl).toBe('http://localhost:5173/accept-invitation?token=local-token');
+    expect(response.status).toBe(AccountStatus.ACTIVE);
+    expect(response.credential.temporaryPassword).toBe('a-generated-temporary-password');
+    expect(response.credential.expiresAt).toBeInstanceOf(Date);
   });
 
   it('rejects Student email updates that conflict with a different User account', async () => {

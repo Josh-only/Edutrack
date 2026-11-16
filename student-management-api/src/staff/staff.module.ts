@@ -6,12 +6,12 @@ import { Staff } from './entities/staff.entity.js';
 import { StaffController } from './staff.controller.js';
 import { StaffRoleGuard } from './staff-role.guard.js';
 import { StaffService } from './staff.service.js';
-import { InvitationsModule } from '../invitations/invitations.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { UsersModule } from '../users/users.module.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Staff, User]), InvitationsModule, AuditModule, AuthModule],
+  imports: [TypeOrmModule.forFeature([Staff, User]), AuditModule, AuthModule, UsersModule],
   controllers: [StaffController],
   providers: [StaffService, JwtAuthGuard, StaffRoleGuard],
 })

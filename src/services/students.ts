@@ -1,5 +1,5 @@
-import { apiRequest, isRecord, parseLocalInvitationUrl, requireNumber, requireString } from './api'
-import type { AccountStatus, Student, StudentCreation } from './api-models'
+import { apiRequest, isRecord, parseTemporaryCredential, requireNumber, requireString } from './api'
+import type { AccountStatus, Student, StudentCreation, TemporaryPasswordIssue } from './api-models'
 
 export type { Student } from './api-models'
 
@@ -51,27 +51,12 @@ export function parseStudent(value: unknown): Student {
 }
 
 function parseCreation(value: unknown): StudentCreation {
-  if (!isRecord(value) || !isRecord(value.invitation)) {
+  if (!isRecord(value)) {
     throw new Error('The server returned an invalid student registration response.')
   }
-  const student = parseStudent(value)
-  const invitation = value.invitation
-  if (invitation.status !== 'pending_delivery' ||
-      typeof invitation.expiresAt !== 'string') {
-    throw new Error('The server returned invalid invitation details.')
-  }
-  const invitationUrl = parseLocalInvitationUrl(
-    invitation.invitationUrl,
-    'The server returned invalid invitation details.',
-  )
   return {
-    ...student,
-    invitation: {
-      id: requireNumber(invitation.id, 'The server returned invalid invitation details.'),
-      expiresAt: invitation.expiresAt,
-      status: 'pending_delivery',
-      ...(invitationUrl ? { invitationUrl } : {}),
-    },
+    ...parseStudent(value),
+    credential: parseTemporaryCredential(value.credential, 'The server returned invalid temporary password details.'),
   }
 }
 
@@ -103,6 +88,19 @@ export async function createStudent(input: CreateStudentInput): Promise<StudentC
     method: 'POST',
     body: JSON.stringify(input),
   }))
+}
+
+export async function issueTemporaryPassword(userId: number): Promise<TemporaryPasswordIssue> {
+  const value = await apiRequest(`/users/${encodeURIComponent(userId)}/temporary-password`, { method: 'POST' })
+  if (!isRecord(value) ||
+      (value.accountType !== 'staff' && value.accountType !== 'student')) {
+    throw new Error('The server returned invalid temporary password details.')
+  }
+  return {
+    ...parseTemporaryCredential(value, 'The server returned invalid temporary password details.'),
+    email: requireString(value.email, 'The server returned invalid temporary password details.'),
+    accountType: value.accountType,
+  }
 }
 
 export async function updateStudent(id: number, input: UpdateStudentInput): Promise<Student> {

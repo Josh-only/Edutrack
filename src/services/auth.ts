@@ -63,6 +63,13 @@ export async function updateOwnEmail(email: string): Promise<AccountIdentity> {
   }))
 }
 
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<AccountIdentity> {
+  return parseAccountIdentity(await apiRequest('/users/me/password', {
+    method: 'PATCH',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }))
+}
+
 export function getAccessToken(): string | null {
   try {
     return sessionStorage.getItem('accessToken')

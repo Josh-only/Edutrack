@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState, PageTitle, StatusBadge } from '../components/PagePrimitives'
-import LocalInvitationLink from '../components/LocalInvitationLink'
-import type { AccountStatus, StaffCreation, StaffMember } from '../services/api-models'
-import { createStaff, getStaff, getStaffById, updateStaff, updateStaffStatus } from '../services/staff'
+import TemporaryCredentialNotice from '../components/TemporaryCredentialNotice'
+import type { AccountStatus, StaffCreation, StaffMember, TemporaryPasswordIssue } from '../services/api-models'
+import { createStaff, getStaff, getStaffById, issueTemporaryPassword, updateStaff, updateStaffStatus } from '../services/staff'
 
 interface StaffForm {
   email: string
@@ -87,13 +87,13 @@ export default function StaffPage() {
     <>
       <PageTitle
         title="Staff directory"
-        description="Create and manage Staff accounts. New accounts receive a time-limited invitation."
+        description="Create and manage Staff accounts. New accounts receive a temporary password to share privately."
         action={<button className="button button--primary" type="button" onClick={() => { setShowForm((value) => !value); setFormError('') }}>{showForm ? 'Close form' : 'Create Staff account'}</button>}
       />
       {created && (
         <>
-          <p className="inline-success" role="status">Staff account created for {created.email}. Invitation #{created.invitation.id} expires {new Date(created.invitation.expiresAt).toLocaleString()}.</p>
-          {created.invitation.invitationUrl && <LocalInvitationLink url={created.invitation.invitationUrl} />}
+          <p className="inline-success" role="status">Staff account created for {created.email}.</p>
+          <TemporaryCredentialNotice credential={created.credential} email={created.email} onDismiss={() => setCreated(null)} />
         </>
       )}
       {showForm && (
@@ -106,7 +106,7 @@ export default function StaffPage() {
           <label>Department<input required maxLength={100} value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} /></label>
           <label>Designation<input required maxLength={100} value={form.designation} onChange={(event) => setForm({ ...form, designation: event.target.value })} /></label>
           {formError && <p className="inline-error form-grid-wide" role="alert">{formError}</p>}
-          <div className="form-grid-wide"><button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account and invite'}</button></div>
+          <div className="form-grid-wide"><button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account and generate password'}</button></div>
         </form>
       )}
       <section className="panel">
@@ -117,7 +117,7 @@ export default function StaffPage() {
           {!loading && !error && <span className="muted">{filtered.length} of {staff.length} profiles</span>}
         </div>
         {loading ? <LoadingState label="Loading Staff…" /> : error ? <ErrorState message={error} onRetry={() => { setLoading(true); setError(''); setRetry((value) => value + 1) }} /> : staff.length === 0 ? (
-          <EmptyState title="No Staff profiles yet" description="Create a Staff account to send an invitation." />
+          <EmptyState title="No Staff profiles yet" description="Create a Staff account to generate a temporary password." />
         ) : filtered.length === 0 ? (
           <EmptyState title="No matching Staff" description="Try a different search term." />
         ) : (
@@ -158,6 +158,9 @@ export function StaffDetailPage() {
   const [reason, setReason] = useState('')
   const [statusError, setStatusError] = useState('')
   const [statusSuccess, setStatusSuccess] = useState('')
+  const [temporaryCredential, setTemporaryCredential] = useState<TemporaryPasswordIssue | null>(null)
+  const [credentialError, setCredentialError] = useState('')
+  const [issuingCredential, setIssuingCredential] = useState(false)
 
   useEffect(() => {
     if (!Number.isInteger(staffId) || staffId < 1) return
@@ -233,6 +236,22 @@ export function StaffDetailPage() {
     }
   }
 
+  async function handleIssueTemporaryPassword() {
+    if (!staff || !window.confirm(`Issue a new temporary password for ${staff.email}? Any pending invitation link will stop working.`)) return
+    setIssuingCredential(true)
+    setCredentialError('')
+    setTemporaryCredential(null)
+    try {
+      const credential = await issueTemporaryPassword(staff.userId)
+      setTemporaryCredential(credential)
+      setStaff({ ...staff, status: 'active' })
+    } catch (failure) {
+      setCredentialError(failure instanceof Error ? failure.message : 'Unable to issue a temporary password.')
+    } finally {
+      setIssuingCredential(false)
+    }
+  }
+
   if (!Number.isInteger(staffId) || staffId < 1) return <ErrorState message="The Staff ID in this address is invalid." />
   if (loading || loadedId !== staffId) return <LoadingState label="Loading Staff profile…" />
   if (error || !staff) return <ErrorState message={error || 'Staff profile is unavailable.'} onRetry={() => { setLoading(true); setError(''); setRetry((value) => value + 1) }} />
@@ -249,6 +268,7 @@ export function StaffDetailPage() {
     <>
       <PageTitle title={`${staff.firstName} ${staff.lastName}`} description={`Staff profile #${staff.id}`} action={<button className="button button--quiet" type="button" onClick={() => navigate('/super-admin/staff')}>Back to directory</button>} />
       {success && <p className="inline-success" role="status">{success}</p>}
+      {temporaryCredential && <TemporaryCredentialNotice credential={temporaryCredential} email={temporaryCredential.email} onDismiss={() => setTemporaryCredential(null)} />}
       <div className="content-grid">
         <section className="panel">
           <div className="panel-heading"><h3>Profile details</h3>{!editing && <button className="button button--secondary" type="button" onClick={() => setEditing(true)}>Edit profile</button>}</div>
@@ -278,6 +298,15 @@ export function StaffDetailPage() {
         <section className="panel">
           <h3>Account lifecycle</h3>
           <p className="muted">Changing status affects the next authenticated API request.</p>
+          {staff.status === 'pending' && (
+            <div className="form-stack">
+              <p>This account is awaiting activation. Issue a temporary password instead of resending its invitation.</p>
+              {credentialError && <p className="inline-error" role="alert">{credentialError}</p>}
+              <button className="button button--primary" type="button" disabled={issuingCredential} onClick={() => void handleIssueTemporaryPassword()}>
+                {issuingCredential ? 'Generating…' : 'Issue temporary password'}
+              </button>
+            </div>
+          )}
           {statusSuccess && <p className="inline-success" role="status">{statusSuccess}</p>}
           {allowedTransitions.length === 0 ? <p>This account has no permitted status transitions.</p> : (
             <form className="form-stack" onSubmit={handleStatus}>

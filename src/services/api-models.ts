@@ -8,11 +8,9 @@ export interface AccountIdentity {
   status: AccountStatus
 }
 
-export interface InvitationReceipt {
-  id: number
+export interface TemporaryCredential {
+  temporaryPassword: string
   expiresAt: string
-  status: 'pending_delivery'
-  invitationUrl?: string
 }
 
 export interface Student {
@@ -25,7 +23,7 @@ export interface Student {
 }
 
 export interface StudentCreation extends Student {
-  invitation: InvitationReceipt
+  credential: TemporaryCredential
 }
 
 export interface StaffMember {
@@ -41,7 +39,12 @@ export interface StaffMember {
 }
 
 export interface StaffCreation extends StaffMember {
-  invitation: InvitationReceipt
+  credential: TemporaryCredential
+}
+
+export interface TemporaryPasswordIssue extends TemporaryCredential {
+  email: string
+  accountType: AccountType
 }
 
 export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'revoked'

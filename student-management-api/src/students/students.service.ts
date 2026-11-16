@@ -1,14 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { Student } from '../student/entities/student.entity/student.entity.js';
 import { User, AccountStatus, AccountType } from '../users/entities/user.entity.js';
+import { UsersService } from '../users/users.service.js';
 import { CreateStudentDto } from './dto/create-student.dto/create-student.dto.js';
 import { UpdateStudentDto } from './dto/update-student.dto/update-student.dto.js';
 import { UpdateAccountStatusDto } from '../users/dto/update-account-status.dto.js';
-import { InvitationsService } from '../invitations/invitations.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AuthenticatedUser } from '../auth/current-user.decorator.js';
 
@@ -16,7 +14,7 @@ import { AuthenticatedUser } from '../auth/current-user.decorator.js';
 export class StudentsService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly invitations: InvitationsService,
+    private readonly usersService: UsersService,
     private readonly audit: AuditService,
     @InjectRepository(Student) private readonly studentRepository: Repository<Student>,
   ) {}
@@ -30,22 +28,17 @@ export class StudentsService {
         if (await users.findOne({ where: { email } }) || await students.findOne({ where: { email } })) {
           throw new ConflictException('Email is already registered.');
         }
+        const credential = await this.usersService.generateTemporaryCredential();
         const user = await users.save(users.create({
-          email, passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
-          accountType: AccountType.STUDENT, status: AccountStatus.PENDING,
+          email,
+          passwordHash: credential.passwordHash,
+          accountType: AccountType.STUDENT,
+          status: AccountStatus.ACTIVE,
+          temporaryPasswordExpiresAt: credential.expiresAt,
         }));
         const student = await students.save(students.create({ user, email, firstName: dto.firstName.trim(), lastName: dto.lastName.trim() }));
-        const createdInvitation = await this.invitations.createFor(manager, user, actor.userId);
         await this.audit.record({ actorUserId: actor.userId, action: 'student.registered', targetType: 'student', targetId: student.id }, manager);
-        return {
-          ...this.toResponse(student),
-          invitation: {
-            id: createdInvitation.invitation.id,
-            expiresAt: createdInvitation.invitation.expiresAt,
-            status: 'pending_delivery',
-            ...(createdInvitation.invitationUrl ? { invitationUrl: createdInvitation.invitationUrl } : {}),
-          },
-        };
+        return { ...this.toResponse(student), credential: { temporaryPassword: credential.temporaryPassword, expiresAt: credential.expiresAt } };
       });
     } catch (error) {
       if (error instanceof ConflictException) throw error;

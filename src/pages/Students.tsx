@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { EmptyState, ErrorState, LoadingState, PageTitle, StatusBadge } from '../components/PagePrimitives'
-import LocalInvitationLink from '../components/LocalInvitationLink'
-import type { AccountStatus, AccountType, Student, StudentCreation } from '../services/api-models'
-import { createStudent, getStudentById, getStudents, updateStudent, updateStudentStatus } from '../services/students'
+import TemporaryCredentialNotice from '../components/TemporaryCredentialNotice'
+import type { AccountStatus, AccountType, Student, StudentCreation, TemporaryPasswordIssue } from '../services/api-models'
+import { createStudent, getStudentById, getStudents, issueTemporaryPassword, updateStudent, updateStudentStatus } from '../services/students'
 
 function studentRouteBase(role: AccountType | undefined): string {
   return role === 'super_admin' ? '/super-admin/students' : '/staff/students'
@@ -76,10 +76,8 @@ export default function StudentPage() {
       />
       {created && (
         <>
-          <p className="inline-success" role="status">
-            Account created for {created.email}. Invitation delivery is asynchronous; invitation #{created.invitation.id} expires {new Date(created.invitation.expiresAt).toLocaleString()}.
-          </p>
-          {created.invitation.invitationUrl && <LocalInvitationLink url={created.invitation.invitationUrl} />}
+          <p className="inline-success" role="status">Student account created for {created.email}.</p>
+          <TemporaryCredentialNotice credential={created.credential} email={created.email} onDismiss={() => setCreated(null)} />
         </>
       )}
       {showForm && (
@@ -89,7 +87,7 @@ export default function StudentPage() {
           <label>First name<input autoComplete="given-name" required value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></label>
           <label>Last name<input autoComplete="family-name" required value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></label>
           {formError && <p className="inline-error form-grid-wide" role="alert">{formError}</p>}
-          <div className="form-grid-wide"><button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account and invite'}</button></div>
+          <div className="form-grid-wide"><button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account and generate password'}</button></div>
         </form>
       )}
       <section className="panel">
@@ -100,7 +98,7 @@ export default function StudentPage() {
           {!loading && !error && <span className="muted">{filtered.length} of {students.length} profiles</span>}
         </div>
         {loading ? <LoadingState label="Loading Students…" /> : error ? <ErrorState message={error} onRetry={() => { setLoading(true); setError(''); setRetry((value) => value + 1) }} /> : students.length === 0 ? (
-          <EmptyState title="No Student profiles yet" description="Register a Student to create an account and send an invitation." />
+          <EmptyState title="No Student profiles yet" description="Register a Student account to generate a temporary password." />
         ) : filtered.length === 0 ? (
           <EmptyState title="No matching Students" description="Try a different name or email." />
         ) : (
@@ -143,6 +141,9 @@ export function StudentDetailPage() {
   const [reason, setReason] = useState('')
   const [statusError, setStatusError] = useState('')
   const [statusSuccess, setStatusSuccess] = useState('')
+  const [temporaryCredential, setTemporaryCredential] = useState<TemporaryPasswordIssue | null>(null)
+  const [credentialError, setCredentialError] = useState('')
+  const [issuingCredential, setIssuingCredential] = useState(false)
 
   useEffect(() => {
     if (!Number.isInteger(studentId) || studentId < 1) return
@@ -207,6 +208,22 @@ export function StudentDetailPage() {
     }
   }
 
+  async function handleIssueTemporaryPassword() {
+    if (!student?.userId || !window.confirm(`Issue a new temporary password for ${student.email}? Any pending invitation link will stop working.`)) return
+    setIssuingCredential(true)
+    setCredentialError('')
+    setTemporaryCredential(null)
+    try {
+      const credential = await issueTemporaryPassword(student.userId)
+      setTemporaryCredential(credential)
+      setStudent({ ...student, status: 'active' })
+    } catch (failure) {
+      setCredentialError(failure instanceof Error ? failure.message : 'Unable to issue a temporary password.')
+    } finally {
+      setIssuingCredential(false)
+    }
+  }
+
   if (!Number.isInteger(studentId) || studentId < 1) return <ErrorState message="The Student ID in this address is invalid." />
   if (loading || loadedId !== studentId) return <LoadingState label="Loading Student profile…" />
   if (error || !student) return <ErrorState message={error || 'Student profile is unavailable.'} onRetry={() => { setLoading(true); setError(''); setRetry((value) => value + 1) }} />
@@ -223,6 +240,7 @@ export function StudentDetailPage() {
     <>
       <PageTitle title={`${student.firstName} ${student.lastName}`} description={`Student profile #${student.id}`} action={<button className="button button--quiet" type="button" onClick={() => navigate(base)}>Back to directory</button>} />
       {success && <p className="inline-success" role="status">{success}</p>}
+      {temporaryCredential && <TemporaryCredentialNotice credential={temporaryCredential} email={temporaryCredential.email} onDismiss={() => setTemporaryCredential(null)} />}
       <div className="content-grid">
         <section className="panel">
           <div className="panel-heading"><h3>Profile details</h3>{!editing && <button className="button button--secondary" type="button" onClick={() => setEditing(true)}>Edit profile</button>}</div>
@@ -249,6 +267,15 @@ export function StudentDetailPage() {
           <section className="panel">
             <h3>Account lifecycle</h3>
             <p className="muted">Changing status affects the next authenticated API request.</p>
+            {student.status === 'pending' && (
+              <div className="form-stack">
+                <p>This account is awaiting activation. Issue a temporary password instead of resending its invitation.</p>
+                {credentialError && <p className="inline-error" role="alert">{credentialError}</p>}
+                <button className="button button--primary" type="button" disabled={issuingCredential} onClick={() => void handleIssueTemporaryPassword()}>
+                  {issuingCredential ? 'Generating…' : 'Issue temporary password'}
+                </button>
+              </div>
+            )}
             {statusSuccess && <p className="inline-success" role="status">{statusSuccess}</p>}
             {allowedTransitions.length === 0 ? <p>This account has no permitted status transitions.</p> : (
               <form className="form-stack" onSubmit={handleStatus}>

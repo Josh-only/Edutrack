@@ -103,6 +103,14 @@ export function requireString(value: unknown, message: string): string {
   return value
 }
 
+export function parseTemporaryCredential(value: unknown, message: string) {
+  if (!isRecord(value)) throw new Error(message)
+  const temporaryPassword = requireString(value.temporaryPassword, message)
+  const expiresAt = requireString(value.expiresAt, message)
+  if (!temporaryPassword || !Number.isFinite(Date.parse(expiresAt))) throw new Error(message)
+  return { temporaryPassword, expiresAt }
+}
+
 export function parseLocalInvitationUrl(value: unknown, message: string): string | undefined {
   if (value === undefined) return undefined
   const rawUrl = requireString(value, message)

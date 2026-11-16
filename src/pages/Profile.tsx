@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/useAuth'
 import { ErrorState, LoadingState, PageTitle, StatusBadge } from '../components/PagePrimitives'
-import { updateOwnEmail } from '../services/auth'
+import { changeOwnPassword, updateOwnEmail } from '../services/auth'
 import { getMyStaffProfile } from '../services/staff'
 import { getMyStudentProfile } from '../services/students'
 import type { StaffMember, Student } from '../services/api-models'
@@ -19,6 +19,12 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordMessage, setPasswordMessage] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const [retry, setRetry] = useState(0)
 
   useEffect(() => {
@@ -59,6 +65,28 @@ export default function ProfilePage() {
     }
   }
 
+  async function handlePasswordChange(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setPasswordError('')
+    setPasswordMessage('')
+    if (newPassword !== confirmPassword) {
+      setPasswordError('The new passwords do not match.')
+      return
+    }
+    setPasswordSaving(true)
+    try {
+      await changeOwnPassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordMessage('Your password has been changed.')
+    } catch (reason) {
+      setPasswordError(reason instanceof Error ? reason.message : 'Unable to change your password.')
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
   if (!account) return null
   return (
     <>
@@ -79,6 +107,23 @@ export default function ProfilePage() {
               {message && <p className="inline-success" role="status">{message}</p>}
               <button className="button button--primary" type="submit" disabled={saving || email.trim() === account.email}>
                 {saving ? 'Saving…' : 'Update email'}
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <h3>Change password</h3>
+            <p className="muted">Use your current password to set a new one. Choose a password with at least 8 characters.</p>
+            <form className="form-stack" onSubmit={handlePasswordChange}>
+              <label htmlFor="current-password">Current password</label>
+              <input id="current-password" type="password" autoComplete="current-password" minLength={8} maxLength={128} required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+              <label htmlFor="new-password">New password</label>
+              <input id="new-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+              <label htmlFor="confirm-new-password">Confirm new password</label>
+              <input id="confirm-new-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+              {passwordError && <p className="inline-error" role="alert">{passwordError}</p>}
+              {passwordMessage && <p className="inline-success" role="status">{passwordMessage}</p>}
+              <button className="button button--primary" type="submit" disabled={passwordSaving}>
+                {passwordSaving ? 'Changing password…' : 'Change password'}
               </button>
             </form>
           </section>

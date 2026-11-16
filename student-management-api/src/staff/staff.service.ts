@@ -1,14 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { AccountStatus, AccountType, User } from '../users/entities/user.entity.js';
+import { UsersService } from '../users/users.service.js';
 import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { UpdateStaffDto } from './dto/update-staff.dto.js';
 import { Staff } from './entities/staff.entity.js';
 import { Student } from '../student/entities/student.entity/student.entity.js';
-import { InvitationsService } from '../invitations/invitations.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AuthenticatedUser } from '../auth/current-user.decorator.js';
 
@@ -21,7 +19,7 @@ export interface StaffResponse {
 export class StaffService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly invitations: InvitationsService,
+    private readonly usersService: UsersService,
     private readonly audit: AuditService,
     @InjectRepository(Staff) private readonly staffRepository: Repository<Staff>,
     @InjectRepository(User) private readonly userRepository: Repository<User>,
@@ -35,24 +33,25 @@ export class StaffService {
         if (await users.findOne({ where: { email } }) || await manager.getRepository(Student).findOne({ where: { email } })) {
           throw new ConflictException('Email is already registered.');
         }
+        const credential = await this.usersService.generateTemporaryCredential();
         const user = await users.save(users.create({
-          email, passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
-          accountType: AccountType.STAFF, status: AccountStatus.PENDING,
+          email,
+          passwordHash: credential.passwordHash,
+          accountType: AccountType.STAFF,
+          status: AccountStatus.ACTIVE,
+          temporaryPasswordExpiresAt: credential.expiresAt,
         }));
         const staffs = manager.getRepository(Staff);
         const profile = await staffs.save(staffs.create({
           user, firstName: dto.firstName.trim(), lastName: dto.lastName.trim(),
           phoneNumber: dto.phoneNumber.trim(), department: dto.department.trim(), designation: dto.designation.trim(),
         }));
-        const createdInvitation = await this.invitations.createFor(manager, user, actor.userId);
         await this.audit.record({ actorUserId: actor.userId, action: 'staff.created', targetType: 'staff', targetId: profile.id }, manager);
         return {
           ...this.toResponse(profile),
-          invitation: {
-            id: createdInvitation.invitation.id,
-            expiresAt: createdInvitation.invitation.expiresAt,
-            status: 'pending_delivery',
-            ...(createdInvitation.invitationUrl ? { invitationUrl: createdInvitation.invitationUrl } : {}),
+          credential: {
+            temporaryPassword: credential.temporaryPassword,
+            expiresAt: credential.expiresAt,
           },
         };
       });

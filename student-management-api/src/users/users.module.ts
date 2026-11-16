@@ -11,10 +11,11 @@ import { AuthModule } from '../auth/auth.module.js';
 import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { Invitation } from '../invitations/entities/invitation.entity.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Student, Staff]),
+    TypeOrmModule.forFeature([User, Student, Staff, Invitation]),
     AuthModule,
     AuditModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
@@ -28,5 +29,6 @@ import { ThrottlerModule } from '@nestjs/throttler';
   ],
   providers: [UsersService, JwtAuthGuard],
   controllers: [UsersController],
+  exports: [UsersService],
 })
 export class UsersModule {}
