@@ -114,8 +114,15 @@ export class UsersService {
       const users = manager.getRepository(User);
       const user = await users.findOne({ where: { id: userId }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw new NotFoundException('Account not found.');
-      if (![AccountType.STAFF, AccountType.STUDENT].includes(user.accountType) || user.status !== AccountStatus.PENDING) {
-        throw new ConflictException('Temporary passwords can only be issued to pending Staff or Student accounts.');
+      const expiredTemporaryPassword =
+        user.status === AccountStatus.ACTIVE &&
+        user.temporaryPasswordExpiresAt !== null &&
+        user.temporaryPasswordExpiresAt <= new Date();
+      if (
+        ![AccountType.STAFF, AccountType.STUDENT].includes(user.accountType) ||
+        (user.status !== AccountStatus.PENDING && !expiredTemporaryPassword)
+      ) {
+        throw new ConflictException('Temporary passwords can only be issued to pending accounts or accounts with an expired temporary password.');
       }
       await this.assertProfileExists(user);
 

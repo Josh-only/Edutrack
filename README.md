@@ -29,7 +29,7 @@ After confirming the PostgreSQL target and taking a recoverable backup, apply th
 
 New Staff and Student accounts receive a randomly generated temporary password when created. The Super Admin or Staff member creating the account must share that password securely; it is displayed once and is not sent by email. It expires if it is not used within 24 hours. On the first successful login, the expiry is removed and the password remains valid until the user changes it in **Profile → Change password**.
 
-To issue a password to an existing linked Staff/Student account still in `pending` status, a Super Admin can open its profile and choose **Issue temporary password**. This activates the account and revokes any outstanding invitation links. Unlinked legacy Student records cannot be issued credentials.
+To issue a password to an existing linked Staff/Student account still in `pending` status—or replace an unused temporary password that has expired—a Super Admin can open its profile and choose **Issue temporary password**. This activates pending accounts and revokes any outstanding invitation links. Unlinked legacy Student records cannot be issued credentials.
 
 Invitation links remain available only for legacy pending accounts and historical invitation recovery. To test those links locally without SMTP, add these settings to `student-management-api/.env` and restart the API:
 

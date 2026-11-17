@@ -13,6 +13,7 @@ import { AuthenticatedUser } from '../auth/current-user.decorator.js';
 export interface StaffResponse {
   id: number; userId: number; email: string; firstName: string; lastName: string;
   phoneNumber: string; department: string; designation: string; status: AccountStatus;
+  temporaryPasswordExpired: boolean;
 }
 
 @Injectable()
@@ -132,7 +133,13 @@ export class StaffService {
   }
 
   private toResponse(profile: Staff): StaffResponse {
-    return { id: profile.id, userId: profile.user.id, email: profile.user.email, firstName: profile.firstName, lastName: profile.lastName, phoneNumber: profile.phoneNumber, department: profile.department, designation: profile.designation, status: profile.user.status };
+    return {
+      id: profile.id, userId: profile.user.id, email: profile.user.email,
+      firstName: profile.firstName, lastName: profile.lastName,
+      phoneNumber: profile.phoneNumber, department: profile.department, designation: profile.designation,
+      status: profile.user.status,
+      temporaryPasswordExpired: Boolean(profile.user.temporaryPasswordExpiresAt && profile.user.temporaryPasswordExpiresAt <= new Date()),
+    };
   }
 
   private isUniqueViolation(error: unknown): boolean {

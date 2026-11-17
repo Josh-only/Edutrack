@@ -237,14 +237,14 @@ export function StaffDetailPage() {
   }
 
   async function handleIssueTemporaryPassword() {
-    if (!staff || !window.confirm(`Issue a new temporary password for ${staff.email}? Any pending invitation link will stop working.`)) return
+    if (!staff || !window.confirm(`Issue a temporary password for ${staff.email}? Any pending invitation link will stop working.`)) return
     setIssuingCredential(true)
     setCredentialError('')
     setTemporaryCredential(null)
     try {
       const credential = await issueTemporaryPassword(staff.userId)
       setTemporaryCredential(credential)
-      setStaff({ ...staff, status: 'active' })
+      setStaff({ ...staff, status: 'active', temporaryPasswordExpired: false })
     } catch (failure) {
       setCredentialError(failure instanceof Error ? failure.message : 'Unable to issue a temporary password.')
     } finally {
@@ -298,9 +298,11 @@ export function StaffDetailPage() {
         <section className="panel">
           <h3>Account lifecycle</h3>
           <p className="muted">Changing status affects the next authenticated API request.</p>
-          {staff.status === 'pending' && (
+          {(staff.status === 'pending' || staff.temporaryPasswordExpired) && (
             <div className="form-stack">
-              <p>This account is awaiting activation. Issue a temporary password instead of resending its invitation.</p>
+              <p>{staff.temporaryPasswordExpired
+                ? "This account's temporary password expired before first sign-in. Issue a replacement password."
+                : 'This account is awaiting activation. Issue a temporary password instead of resending its invitation.'}</p>
               {credentialError && <p className="inline-error" role="alert">{credentialError}</p>}
               <button className="button button--primary" type="button" disabled={issuingCredential} onClick={() => void handleIssueTemporaryPassword()}>
                 {issuingCredential ? 'Generating…' : 'Issue temporary password'}

@@ -124,6 +124,10 @@ export class StudentsService {
     return {
       id: student.id, userId: student.user?.id ?? null, firstName: student.firstName, lastName: student.lastName,
       email: student.email, status: student.user?.status ?? null,
+      temporaryPasswordExpired: Boolean(
+        student.user?.temporaryPasswordExpiresAt &&
+        student.user.temporaryPasswordExpiresAt <= new Date(),
+      ),
     };
   }
 

@@ -16,7 +16,7 @@ Authorization: Bearer <accessToken>
 
 `POST /users/login` and the legacy `POST /invitations/accept` are public. All other Phase 1 endpoints require a valid Bearer JWT; `GET /` is a public scaffold route. JWTs expire after one hour. For each protected request, the JWT strategy loads the account from the database, requires `status: "active"`, and checks that Student/Staff accounts have their corresponding profile. Role authorization uses the database-loaded account type, not a role supplied by the client.
 
-New Staff and Student accounts are provisioned with a generated temporary password. It is returned only in the create/reset response, expires if unused for 24 hours, and its expiry is cleared on first successful login. After first login it remains valid until changed by the account owner. A Super Admin can issue one to an existing linked pending account; this activates the account and revokes its outstanding invitations. Legacy unlinked Student rows are never modified.
+New Staff and Student accounts are provisioned with a generated temporary password. It is returned only in the create/reset response, expires if unused for 24 hours, and its expiry is cleared on first successful login. After first login it remains valid until changed by the account owner. A Super Admin can issue one to an existing linked pending account or replace an expired, unused temporary password; doing so activates pending accounts and revokes outstanding invitations. Profile responses expose only whether an unused temporary password has expired, never the expiry timestamp or password. Legacy unlinked Student rows are never modified.
 
 Only active accounts can log in or continue using an existing token. `pending`, `inactive`, and `suspended` accounts receive `401`; an active Student/Staff account missing its profile receives `409`. Status changes therefore take effect on the next protected request.
 
@@ -46,11 +46,12 @@ Student profile (including legacy profiles with no linked account):
   "firstName": "Ada",
   "lastName": "Okafor",
   "email": "ada@example.test",
-  "status": "active"
+  "status": "active",
+  "temporaryPasswordExpired": false
 }
 ```
 
-For an unlinked legacy Student, `userId` and `status` are `null`. Those rows remain in staff-visible directory results; they are not automatically linked to a User.
+For an unlinked legacy Student, `userId` and `status` are `null` and `temporaryPasswordExpired` is `false`. Those rows remain in staff-visible directory results; they are not automatically linked to a User.
 
 Staff profile:
 
@@ -64,7 +65,8 @@ Staff profile:
   "phoneNumber": "+2348000000000",
   "department": "Science",
   "designation": "Coordinator",
-  "status": "pending"
+  "status": "active",
+  "temporaryPasswordExpired": false
 }
 ```
 
@@ -270,7 +272,7 @@ Both passwords must contain 8–128 characters. The new password must differ fro
 
 ### `POST /users/:id/temporary-password`
 
-Issues a new temporary password to an existing linked Staff or Student account that is still `pending`. It activates the account and revokes all outstanding invitations in the same transaction. This endpoint must not be used for unlinked legacy Student records.
+Issues a new temporary password to an existing linked Staff or Student account that is still `pending`, or replaces a temporary password that expired unused on an active account. It activates pending accounts and revokes all outstanding invitations in the same transaction. This endpoint must not be used for unlinked legacy Student records.
 
 - **Authentication/role:** Bearer JWT; `super_admin` only.
 - **Path:** `id` is the User ID (not the Staff or Student profile ID), parsed as an integer.
@@ -289,7 +291,7 @@ Issues a new temporary password to an existing linked Staff or Student account t
 
 The raw password is returned once and is not stored in logs or audit events. It expires after 24 hours if unused. The first successful login clears the expiry; afterward the password remains valid until changed by the account owner.
 
-- **Errors:** `400` malformed User ID; `401` invalid/non-active session; `403` non-Super Admin; `404` User not found; `409` account is not a pending Staff/Student or its linked profile is missing.
+- **Errors:** `400` malformed User ID; `401` invalid/non-active session; `403` non-Super Admin; `404` User not found; `409` account is neither pending nor awaiting replacement of an expired temporary password, or its linked profile is missing.
 
 ## Student endpoints
 
@@ -365,6 +367,7 @@ Creates an active Student User and linked profile, generates a one-time temporar
   "lastName": "Okafor",
   "email": "learner@example.test",
   "status": "active",
+  "temporaryPasswordExpired": false,
   "credential": {
     "temporaryPassword": "<one-time-secret>",
     "expiresAt": "2026-11-17T10:00:00.000Z"
@@ -423,7 +426,7 @@ Changes the status of a linked Student account. An unlinked legacy Student has n
 
 - **Authentication/roles:** Bearer JWT; `super_admin` only.
 - **Query/path/body:** None.
-- **Success (`200`):** Array of Staff profile objects, ordered by ascending ID. Each object has `id`, `userId`, `email`, `firstName`, `lastName`, `phoneNumber`, `department`, `designation`, and `status`.
+- **Success (`200`):** Array of Staff profile objects, ordered by ascending ID. Each object has `id`, `userId`, `email`, `firstName`, `lastName`, `phoneNumber`, `department`, `designation`, `status`, and `temporaryPasswordExpired`. The flag is true only while a temporary password is expired and unused.
 - **Errors:** `401` invalid/non-active session; `403` Staff or Student role; `409` active Staff account missing its profile.
 
 ### `GET /staff/me`
@@ -475,6 +478,7 @@ Creates an active Staff User and linked Staff profile, generates a one-time temp
   "department": "Science",
   "designation": "Coordinator",
   "status": "active",
+  "temporaryPasswordExpired": false,
   "credential": {
     "temporaryPassword": "<one-time-secret>",
     "expiresAt": "2026-11-17T10:00:00.000Z"

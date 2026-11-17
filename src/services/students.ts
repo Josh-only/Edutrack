@@ -37,7 +37,8 @@ export function parseStudent(value: unknown): Student {
   const userId = value.userId
   const status = value.status
   if ((userId !== null && typeof userId !== 'number') ||
-      (status !== null && !isAccountStatus(status))) {
+      (status !== null && !isAccountStatus(status)) ||
+      typeof value.temporaryPasswordExpired !== 'boolean') {
     throw new Error('The student data returned by the server is invalid.')
   }
   return {
@@ -47,6 +48,7 @@ export function parseStudent(value: unknown): Student {
     lastName: requireString(value.lastName, 'The student data returned by the server is invalid.'),
     email: requireString(value.email, 'The student data returned by the server is invalid.'),
     status,
+    temporaryPasswordExpired: value.temporaryPasswordExpired,
   }
 }
 

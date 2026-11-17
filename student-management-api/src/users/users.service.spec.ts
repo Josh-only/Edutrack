@@ -151,6 +151,34 @@ describe('UsersService', () => {
     expect(JSON.stringify(audit.record.mock.calls)).not.toContain(result.temporaryPassword);
   });
 
+  it('allows Super Admin to replace an expired, unused temporary password', async () => {
+    const expiredUser = {
+      id: 27,
+      email: 'expired-staff@example.test',
+      accountType: AccountType.STAFF,
+      status: AccountStatus.ACTIVE,
+      passwordHash: 'expired-hash',
+      temporaryPasswordExpiresAt: new Date(Date.now() - 1),
+    } as User;
+    const users = {
+      findOne: vi.fn().mockResolvedValue(expiredUser),
+      save: vi.fn().mockImplementation(async (record) => record),
+    };
+    const invitations = {
+      find: vi.fn().mockResolvedValue([]),
+      save: vi.fn(),
+    };
+    const manager = { getRepository: (entity: unknown) => entity === User ? users : invitations };
+    dataSource.transaction.mockImplementation(async (callback) => callback(manager));
+
+    const result = await service.issueTemporaryPassword(expiredUser.id, 1);
+
+    expect(result).toMatchObject({ email: expiredUser.email, accountType: AccountType.STAFF });
+    expect(expiredUser.status).toBe(AccountStatus.ACTIVE);
+    expect(expiredUser.temporaryPasswordExpiresAt).toEqual(result.expiresAt);
+    expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
   it('does not activate non-pending accounts or pending accounts without a linked profile', async () => {
     const pendingUser = {
       id: 26,

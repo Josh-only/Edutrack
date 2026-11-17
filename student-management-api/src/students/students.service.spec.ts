@@ -39,7 +39,10 @@ describe('StudentsService', () => {
 
   it('preserves and returns legacy Student records as unlinked', async () => {
     studentRepository.find.mockResolvedValue([{ ...student, id: 3, user: null }]);
-    await expect(service.findAll()).resolves.toEqual([{ id: 3, userId: null, firstName: 'Ada', lastName: 'Okafor', email: student.email, status: null }]);
+    await expect(service.findAll()).resolves.toEqual([{
+      id: 3, userId: null, firstName: 'Ada', lastName: 'Okafor',
+      email: student.email, status: null, temporaryPasswordExpired: false,
+    }]);
   });
 
   it('includes a local invitation URL when the invitation service returns one', async () => {

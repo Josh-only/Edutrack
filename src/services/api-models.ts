@@ -20,6 +20,7 @@ export interface Student {
   lastName: string
   email: string
   status: AccountStatus | null
+  temporaryPasswordExpired: boolean
 }
 
 export interface StudentCreation extends Student {
@@ -36,6 +37,7 @@ export interface StaffMember {
   department: string
   designation: string
   status: AccountStatus
+  temporaryPasswordExpired: boolean
 }
 
 export interface StaffCreation extends StaffMember {

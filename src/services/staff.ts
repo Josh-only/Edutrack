@@ -32,7 +32,7 @@ function isAccountStatus(value: unknown): value is AccountStatus {
 }
 
 export function parseStaff(value: unknown): StaffMember {
-  if (!isRecord(value) || !isAccountStatus(value.status)) {
+  if (!isRecord(value) || !isAccountStatus(value.status) || typeof value.temporaryPasswordExpired !== 'boolean') {
     throw new Error('The staff data returned by the server is invalid.')
   }
   return {
@@ -45,6 +45,7 @@ export function parseStaff(value: unknown): StaffMember {
     department: requireString(value.department, 'The staff data returned by the server is invalid.'),
     designation: requireString(value.designation, 'The staff data returned by the server is invalid.'),
     status: value.status,
+    temporaryPasswordExpired: value.temporaryPasswordExpired,
   }
 }
 

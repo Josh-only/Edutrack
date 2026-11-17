@@ -28,7 +28,7 @@ describe('StaffService', () => {
     await expect(service.findMine({ ...actor, userId: 2, accountType: AccountType.STAFF })).resolves.toMatchObject({ userId: 2, status: AccountStatus.ACTIVE });
   });
 
-  it('creates a pending Staff account and profile through the transaction manager', async () => {
+  it('creates an active Staff account and returns its temporary credential', async () => {
     const userRepo = {
       findOne: vi.fn().mockResolvedValue(null),
       create: vi.fn((value) => value),

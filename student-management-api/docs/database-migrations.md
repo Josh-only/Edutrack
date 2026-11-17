@@ -39,4 +39,4 @@ No migration assigns `students.user_id`. The three legacy Student records remain
 
 ## Temporary account passwords migration
 
-`TemporaryAccountPasswords20261116000000` adds the nullable `users.temporaryPasswordExpiresAt` column. Apply it before running the API version that implements generated temporary passwords. It is additive and does not change existing account credentials or statuses. Confirm the database target and backup before applying migrations; no migration has been applied to a database as part of this code change.
+`TemporaryAccountPasswords20261116000000` adds the nullable `users.temporaryPasswordExpiresAt` column. Apply it before running the API version that implements generated temporary passwords. It is additive and does not change existing account credentials or statuses. Confirm the database target and backup before applying migrations. Application startup does not automatically apply migrations.
