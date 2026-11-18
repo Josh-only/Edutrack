@@ -5,7 +5,12 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Allow local frontend origins during development while still rejecting unexpected domains.
+  const configuredOrigins = (process.env.FRONTEND_ORIGIN ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  // Keep localhost available in development and require explicit production origins.
   app.enableCors({
     origin: (
       origin: string | undefined,
@@ -17,7 +22,7 @@ async function bootstrap() {
         /^http:\/\/0\.0\.0\.0:\d+$/,
       ];
 
-      const isAllowed = !origin || allowedOrigins.some((pattern) => pattern.test(origin));
+      const isAllowed = !origin || allowedOrigins.some((pattern) => pattern.test(origin)) || configuredOrigins.includes(origin);
       callback(null, isAllowed);
     },
     credentials: true,
@@ -33,7 +38,7 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 
 await bootstrap();

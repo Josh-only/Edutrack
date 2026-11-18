@@ -1,10 +1,6 @@
 type Environment = Record<string, unknown>;
 
 const REQUIRED_ENVIRONMENT_VARIABLES = [
-  'DB_HOST',
-  'DB_USERNAME',
-  'DB_PASSWORD',
-  'DB_DATABASE',
   'JWT_SECRET',
 ] as const;
 
@@ -28,7 +24,14 @@ export function validateEnvironment<T extends Environment>(environment: T): T {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
-  validatePort(environment, 'DB_PORT');
+  const hasDatabaseUrl = typeof environment.DATABASE_URL === 'string' && environment.DATABASE_URL.trim().length > 0;
+  const missingDatabaseParts = ['DB_HOST', 'DB_USERNAME', 'DB_PASSWORD', 'DB_DATABASE']
+    .filter((name) => typeof environment[name] !== 'string' || String(environment[name]).trim() === '');
+  if (!hasDatabaseUrl && missingDatabaseParts.length > 0) {
+    throw new Error(`Set DATABASE_URL or provide all database settings: ${missingDatabaseParts.join(', ')}.`);
+  }
+
+  if (!hasDatabaseUrl) validatePort(environment, 'DB_PORT');
   validatePort(environment, 'PORT');
   const localInvitationLinks = environment.LOCAL_INVITATION_LINKS;
   if (localInvitationLinks !== undefined && localInvitationLinks !== 'true' && localInvitationLinks !== 'false') {

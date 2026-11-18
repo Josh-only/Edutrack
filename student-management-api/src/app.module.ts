@@ -33,11 +33,15 @@ import { TemporaryAccountPasswords20261116000000 } from './migrations/2026111600
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get<string>('DB_PORT') ?? 5432),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
+        ...(configService.get<string>('DATABASE_URL')
+          ? { url: configService.getOrThrow<string>('DATABASE_URL') }
+          : {
+              host: configService.get<string>('DB_HOST'),
+              port: Number(configService.get<string>('DB_PORT') ?? 5432),
+              username: configService.get<string>('DB_USERNAME'),
+              password: configService.get<string>('DB_PASSWORD'),
+              database: configService.get<string>('DB_DATABASE'),
+          }),
         autoLoadEntities: true,
         synchronize: false,
         migrationsTransactionMode: 'each',

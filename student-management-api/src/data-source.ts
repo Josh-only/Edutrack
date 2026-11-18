@@ -11,11 +11,15 @@ import { TemporaryAccountPasswords20261116000000 } from './migrations/2026111600
 
 export default new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT ?? 5432),
-  username: process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
+  ...(process.env.DATABASE_URL
+    ? { url: process.env.DATABASE_URL }
+    : {
+        host: process.env.DB_HOST,
+        port: Number(process.env.DB_PORT ?? 5432),
+        username: process.env.DB_USERNAME,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_DATABASE,
+    }),
   entities: [Student, Staff, User],
   migrations: [BaselineUsersStudents20261102000000, CreateStaffTable20261103000000, AddSuperAdminAccountType20261104000000, PhaseOneLifecycle20261104000001, AcademicMvp20261115000000, TemporaryAccountPasswords20261116000000],
   synchronize: false,
