@@ -2,6 +2,7 @@ services:
   - type: web
     name: edutrack-api
     runtime: node
+    plan: free
     rootDir: student-management-api
     buildCommand: npm ci && npm run build
     startCommand: npm run migration:run && npm run start:prod
@@ -39,3 +40,4 @@ services:
 
 databases:
   - name: edutrack-db
+    plan: free
